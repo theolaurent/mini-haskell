@@ -47,8 +47,8 @@ type schema =
 
 type env = (Var.t * schema) list
 
-let split q2 q =
-  List.partition (fun (x,_) -> List.exists (fun (y,_) -> x = y) q) q2
+let split q2 vars =
+  List.partition (fun (x,_) -> List.exists (fun y -> x = y) vars) q2
 
 
 let forall_map q4 sch =
@@ -146,7 +146,7 @@ let rec normal_form = function
      | (STy tau, _) -> subst alpha tau nfsigma'
      | _ when not (is_free alpha nfsigma') -> nfsigma'
      | _ -> SForall ((alpha, (bound, nfsigma)), nfsigma')
-
+		    
 let rec subst_extracted = function
   | [] -> (fun x -> x)
   | (alpha, (_, sigma)) :: q ->
@@ -230,7 +230,52 @@ let rec abstraction_check q sigma1 sigma2 =
 	      let poly = modify_polynom poly          pred (0, 0, 0) (1, 0, 0) sigma2 in
 	      Polynom.for_all (fun (cx, _, _) v -> v = 0 || cx = 0) poly
     end
-			    
+
+exception UpdateFailure
+	 
+let update q (alpha, (bound, sigma)) =
+  let ftv = free_variables sigma in
+  let (q1, q2) = split q (VarSet.elements ftv) in
+  let rec find_alpha = function
+    | [] -> assert false
+    | (beta, (bound', sigma')) :: q2_a ->
+       if beta = alpha
+       then begin
+	   if bound = BRigid && not (abstraction_check q sigma' sigma)
+	   then raise UpdateFailure
+	   else (alpha, (bound, sigma)) :: (q2_a @ q1)
+	 end
+       else (beta, (bound', sigma')) :: (find_alpha q2_a)
+  in
+  find_alpha q2
+
+let merge q alpha alpha' =
+  let rec find constr alpha'  = function
+    | [] -> assert false
+    | (beta, (bound', sigma')) :: q0 ->
+       let (alpha, (bound, sigma)) = constr in
+       if beta = alpha' && sigma = sigma'
+       then
+	 let bound'' =
+	   if bound = BFlexible && bound' = BFlexible
+	   then BFlexible
+	   else BRigid
+	 in
+	 (alpha', (BRigid, STy (TVar alpha))) :: (alpha, (bound'', sigma)) :: q0
+       else (beta, (bound', sigma')) :: (find constr alpha' q0)
+  in
+  let rec find2 = function
+    | [] -> assert false
+    | (beta, (bound, sigma)) :: q1 ->
+	     if beta = alpha
+	     then find (alpha, (bound, sigma)) alpha' q1
+	     else if beta = alpha'
+	     then find (alpha', (bound, sigma)) alpha q1
+	     else (beta, (bound, sigma)) :: (find2 q1)			    
+
+  in
+  find2 q
+	     
 exception UnificationFailure
 
 (* unification algorithm (monotypes) *)
@@ -255,7 +300,7 @@ let rec infer q env = function
      let q1 = (alpha, (BFlexible, SBot)) :: q in
      let (q2, sigma) = infer q1 ((x,STy (TVar alpha)) :: env) a in
      let beta = Var.fresh () in
-     let (q3, q4) = split q2 q in
+     let (q3, q4) = split q2 (fst (List.split q)) in
      q3, forall_map q4 (SForall ((beta, (BFlexible, sigma)),
 				 STy (TArrow (TVar alpha, TVar beta))))
   | App (a, b) ->
@@ -270,7 +315,7 @@ let rec infer q env = function
 		     :: q2)
 		    (TVar alpha_a) (TVar alpha_b)
      in
-     let (q4, q5) = split q3 q in
+     let (q4, q5) = split q3 (fst (List.split q)) in
      q4, forall_map q5 (STy (TVar beta))
   | Let (x, a1, a2) ->
      let (q1, sigma1) = infer q env a1 in
