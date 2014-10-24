@@ -10,10 +10,8 @@ type schema =
                                   as we can say "all alpha = bottom, alpha" *)
  and constr = Var.t * (bound * schema)
 
+type prefix = constr list
 			
-
-type env = (Var.t * schema) list
-
 let forall_map q sch =
   List.fold_left (fun sch constr ->
 		  SForall (constr,sch)
@@ -61,3 +59,7 @@ let rec normal_form = function
      | (STy tau, _) -> subst alpha tau nfsigma'
      | _ when not (is_free alpha nfsigma') -> nfsigma'
      | _ -> SForall ((alpha, (bound, nfsigma)), nfsigma')
+
+(* Split q into (q inter vars) and (q \ vars) *)
+let split q vars =
+  List.partition (fun (x,_) -> List.exists (fun y -> x = y) vars) q

@@ -1,6 +1,8 @@
 open Ast
 open Schema
 open Unification
+
+type env = (Var.t * schema) list
        
  (* type inference *)
 let rec infer q env = function
