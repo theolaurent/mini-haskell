@@ -3,9 +3,6 @@ open Schema
 exception Failure
 exception UpdateFailure
 
-(* Split q into (q inter vars) and (q \ vars) *)
-let split q vars =
-  List.partition (fun (x,_) -> List.exists (fun y -> x = y) vars) q
 
 		 
 (* Associated substitution of a prefix *)
@@ -155,8 +152,7 @@ let merge q alpha alpha' =
   find2 q
 	     
 
-let binding q a =
-  List.assoc a q
+
 
 (* unification algorithm (monotypes) *)
 let rec unify q t1 t2 = match (t1, t2) with
@@ -165,11 +161,15 @@ let rec unify q t1 t2 = match (t1, t2) with
     when g1 = g2
       && List.length l1 = List.length l2 ->
     List.fold_left (fun res (t1, t2) -> unify res t1 t2) q (List.combine l1 l2)
-  | (Ty.TConst _, Ty.TConst _) -> raise UnificationFailure
-  | (Ty.TVar a1, Ty.TVar a2) ->
-     if 
+  | (Ty.TConst _, Ty.TConst _) -> raise Failure
+(*  | (Ty.TVar a1, Ty.TVar a2) ->
+     let (b1, s1) = List.assoc a1 q in
+     let (b2, s2) = List.assoc a2 q in
+	 
+
   | (Ty.TVar a1, tau) | (tau, Ty.TVar a1) ->
-			    if 
+			    if
+ *)
   | _ -> failwith "to be continued"
 
 (* unification algorithm (polytypes) *)
