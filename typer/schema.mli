@@ -4,14 +4,14 @@ type bound =
       
 type schema =
   | SBot
-  | STy of Ty.ty
-  | SForall of constr * schema
+  | SForall of constr list * Ty.ty
  and constr = Var.t * (bound * schema)
 
 type prefix = constr list
 			
-val forall_map : prefix -> schema -> schema
 
+val forall : constr -> schema -> schema
+val forall_map : prefix -> schema -> schema
 
 val subst : Var.t -> Ty.ty -> schema -> schema
 
@@ -23,6 +23,8 @@ val free_variables : schema -> Var.Set.t
 
 (* normal form of equivalent schemas are equal up to permutations of some bindings *)
 val normal_form : schema -> schema
+
+val constructed_form : schema -> schema
 			      
 val split : prefix -> Var.t list -> prefix * prefix
 					       
