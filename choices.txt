@@ -1,6 +1,0 @@
-
-hashtable pour les keywords
-
-TODO : ast "minimal" ; fonction pour construire les strings... ; 0 - n pour -n, etc...
-
-TODO : faire un 'a ast avec des variants polymorphes
