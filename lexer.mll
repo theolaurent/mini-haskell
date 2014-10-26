@@ -32,7 +32,11 @@ rule token = parse
   | [' ' '\t' '\r' '\n']      { token lexbuf }
   | digit+ as str        { INT (int_of_string str) }
   | ident as str         { try Hashtbl.find keywords str
-                           with Not_found -> ID str }
+                           with Not_found ->
+				let pos = Lexing.lexeme_start_p in
+				if pos.Lexing.cnum - pos.Lexing.bol = 0
+				then ID0 str
+				else ID str }
   | "--"                 { lcomment lexbuf }
   | '\''                 { char lexbuf }
   | "||"                 { OR }
