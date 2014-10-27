@@ -3,10 +3,10 @@
   open Ast
   open Utils.OptionM
 
-  let parsing_error msg i =
+  let parsing_error msg startpos endpos =
     let () = Err.report ("syntax error: " ^ msg)
-                        (Parsing.rhs_start_pos i)
-                        (Parsing.rhs_end_pos i)
+                        (startpos)
+                        (endpos)
     in None
 
        (* TODO : improve error reporting by adding some error
@@ -48,7 +48,7 @@
 
 main:
 | ds = list(def0) EOF { sequence ds }
-| error EOF           { parsing_error "..." 1 }
+| error EOF           { parsing_error "..." $startpos($1) $endpos($1) }
 
 def0:
 | id = ID0 l = list(ID) EQ e = expr { map (fun e ->
@@ -62,11 +62,11 @@ def:
 
 simple_expr:
 | LP e = expr RP { map Utils.id e }
-| LP error RP    { parsing_error "..." 2 }
+| LP error RP    { parsing_error "..." $startpos($2) $endpos($2) }
 | id = ID { Some (Var id) }
 | c = const { map Utils.id c }
 | LBK l = separated_list(COM, expr) RBK { map (fun x -> ast_list x) (sequence l) }
-| LBK error RBK { parsing_error "..." 2 }
+| LBK error RBK { parsing_error "..." $startpos($2) $endpos($2) }
 
 expr:
 | l = nonempty_list(simple_expr) { map (fun x -> ast_app (List.hd x) (List.tl x)) (sequence l) }
@@ -93,13 +93,24 @@ expr:
                              { map3 (fun e x y ->
                                      ast_case e x hd tl y)
                                     e x y }
-| DO LB l = separated_nonempty_list(SCOL, def) SCOL? RB { failwith "TODO" }
-| RETURN LP RP { failwith "TODO" }
+(*| DO LB l = separated_nonempty_list(SCOL, expr) SCOL RB { List.hd l } *)
+| DO l = bounded_separated_list(LB, SCOL, expr, RB) { List.hd l }
+| RETURN LP RP { Some (Ast.Const (CUnit)) }
 
 binds:
 | d = def { map (fun x -> [x]) d }
-| LB l = separated_nonempty_list(SCOL, def) SCOL? RB { sequence l }
+(*| LB l = separated_nonempty_list(SCOL, def) SCOR RB { sequence l }*)
+| l = bounded_separated_list(LB, SCOL, def, RB) { sequence l }
 
+stopped_separated_list(sep, X, stop):
+| x = X ; stop { [x] }
+| x = X ; sep ; stop { [x] }
+| x = X ; sep ; l = stopped_separated_list(sep, X, stop) { x :: l }
+				
+bounded_separated_list(start, sep, X, stop):
+| start ; l = stopped_separated_list(sep, X, stop) { l }
+				
+				
 const:
 | c = CHAR { Some (Const (CChar c)) }
 | i = INT { Some (Const (CInt  i)) }

@@ -2,10 +2,11 @@
 type var = string
 
 type const =
-| CBool of bool
-| CInt of int
-| CChar of char
-| CPrim of string
+  | CUnit
+  | CBool of bool
+  | CInt of int
+  | CChar of char
+  | CPrim of string
 
 type ast = (* on le mettra en prvate ou pas ? *) (* je vois pas trop l'interet du private, mais on peut *)
   | Const of const

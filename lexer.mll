@@ -30,8 +30,8 @@
 
 let digit = ['0'-'9']
 let ident = ['a'-'z'] ([ 'a'-'z'] | ['A'-'Z'] | '_' | '\'' | ['0'-'9' ])*
-let car = (['\032' - '\126'] # ['\\' '"']) (* what about \' ?? *)
-let car_str = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t"
+let car = (['\032' - '\126'] # ['\\' '\'']) (* what about \' ?? *)
+let car_str = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t" | '\''
 
 rule token = parse
   | [' ' '\t' '\r']      { token lexbuf }
@@ -39,10 +39,10 @@ rule token = parse
   | digit+ as str        { INT (int_of_string str) }
   | ident as str         { try Hashtbl.find keywords str
                            with Not_found ->
-				                     let pos = Lexing.lexeme_start_p lexbuf in
-				                     if pos.Lexing.pos_cnum - pos.Lexing.pos_bol = 0
-				                     then ID0 str
-				                     else ID str }
+			     let pos = Lexing.lexeme_start_p lexbuf in
+			     if pos.Lexing.pos_cnum - pos.Lexing.pos_bol = 0
+			     then ID0 str
+			     else ID str }
   | "True"               { BOOL true }
   | "False"              { BOOL false }
   | "--"                 { lcomment lexbuf }
@@ -75,12 +75,13 @@ rule token = parse
 
 and char = parse
   | (car as c) '\''      { CHAR c }
-  | "\\\\"               { CHAR '\\' }
-  | "\\\""               { CHAR '\"' }
-  | "\\n"                { CHAR '\n' }
-  | "\\t"                { CHAR '\t' }
+  | "\\\\'"             { CHAR '\\' }
+  | "\\\"'"             { CHAR '\"' }
+  | "\\''"              { CHAR '\'' }
+  | "\\n'"              { CHAR '\n' }
+  | "\\t'"              { CHAR '\t' }
   | '\\' car             { lexing_error "Unknown escape sequence" lexbuf }
-  | car [^ '\'']         { lexing_error "Too wide character literal" lexbuf }
+  | car car              { lexing_error "Too wide character literal" lexbuf }
   | '\''                 { lexing_error "Empty character literal" lexbuf }
   | _                    { lexing_error "Unknown character" lexbuf }
                          (* is this error message relevant ? cf \n *)
