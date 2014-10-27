@@ -49,7 +49,7 @@ rule token = parse
   | '\''                 { char lexbuf } (* what about strings ? *)
   | "||"                 { OR }
   | "&&"                 { AND }
-  | "="                 { EQEQ }
+  | "="                  { EQ }
   | '<'                  { LT }
   | "<="                 { LEQ }
   | '>'                  { GT }
