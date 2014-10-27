@@ -1,0 +1,2 @@
+
+main = error (error "oups" : [])
