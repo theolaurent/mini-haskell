@@ -8,6 +8,9 @@
                         (Parsing.rhs_start_pos i)
                         (Parsing.rhs_end_pos i)
     in None
+
+       (* TODO : improve error reporting by adding some error
+                 cases in the grammar *)
 %}
 
 %parameter <Err:Errors.S>
@@ -59,9 +62,11 @@ def:
 
 simple_expr:
 | LP e = expr RP { map Utils.id e }
+| LP error RP    { parsing_error "..." 2 }
 | id = ID { Some (Var id) }
 | c = const { map Utils.id c }
 | LBK l = separated_list(COM, expr) RBK { map (fun x -> ast_list x) (sequence l) }
+| LBK error RBK { parsing_error "..." 2 }
 
 expr:
 | l = nonempty_list(simple_expr) { map (fun x -> ast_app (List.hd x) (List.tl x)) (sequence l) }
