@@ -1,15 +1,19 @@
 type bound =
   | BRigid
   | BFlexible
+
+type schema_terminal =
+  | STBot
+  | STTy of Ty.ty
       
-type schema =
-  | SBot
-  | SForall of constr list * Ty.ty
+type schema = S of constr list * schema_terminal
  and constr = Var.t * (bound * schema)
+      
 
 type prefix = constr list
 			
-
+val bot : schema
+val ty : Ty.ty -> schema
 val forall : constr -> schema -> schema
 val forall_map : prefix -> schema -> schema
 

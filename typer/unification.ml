@@ -11,7 +11,7 @@ let rec subst_extracted = function
   | (alpha, (_, sigma)) :: q ->
      let nfsigma = normal_form sigma in
      match nfsigma with
-     | SForall ([], ty) -> (fun y -> subst_extracted q (subst alpha ty y))
+     | S ([], STTy ty) -> (fun y -> subst_extracted q (subst alpha ty y))
      | _ -> subst_extracted q
 			    
 
@@ -49,20 +49,20 @@ The goal is to check that leading abstractions have not been modified between sc
 	end)
 	    
   let rec modify_polynom poly modif coefs a = function
-    | SBot ->
+    | S ([], STBot) ->
        let v =
 	 try Polynom.find coefs poly
 	 with Not_found -> 0
        in
        let poly = Polynom.remove coefs poly in		  
        Polynom.add coefs (modif v) poly
-    | SForall ([], ty) ->
+    | S ([], STTy _) ->
        poly
-    | SForall ((alpha, (bound, sigma)) :: pref, ty) ->
-       let sigma' = SForall (pref, ty) in
+    | S ((alpha, (bound, sigma)) :: pref, t) ->
+       let sigma' = S (pref, t) in
        if not (is_free alpha sigma')
        then modify_polynom poly modif coefs a sigma'
-       else if normal_form sigma = SForall ([], Ty.variable alpha)
+       else if normal_form sigma = ty (Ty.variable alpha)
        then modify_polynom poly modif coefs a sigma
      else begin
 	 let poly = modify_polynom poly modif coefs a sigma' in
@@ -72,7 +72,7 @@ The goal is to check that leading abstractions have not been modified between sc
        end
 	    
   let is_monotype = function
-    | SForall ([], _) -> true
+    | S ([], STTy _) -> true
     | _ -> false
 	     
 	     
@@ -88,7 +88,7 @@ The goal is to check that leading abstractions have not been modified between sc
 	if is_monotype (ext_sub nf1)
 	then true
       else match ext_sub nf2 with
-	   | SForall([], Ty.TVar v) ->
+	   | S ([], STTy (Ty.TVar v)) ->
 	      begin
 		try
 		  let (bound, sigma) = List.assoc v q in
@@ -116,7 +116,7 @@ let update q (alpha, (bound, sigma)) =
     | (beta, (bound', sigma')) :: q2_a ->
        if beta = alpha
        then begin
-	   if bound = BRigid && not (abstraction_check q sigma' sigma)
+	   if bound' = BRigid && not (abstraction_check q sigma' sigma)
 	   then raise UpdateFailure
 	   else (alpha, (bound, sigma)) :: (q2_a @ q1)
 	 end
@@ -137,7 +137,7 @@ let merge q alpha alpha' =
 	   then BFlexible
 	   else BRigid
 	 in
-	 (alpha', (BRigid, SForall ([], Ty.variable alpha)))
+	 (alpha', (BRigid, ty (Ty.variable alpha)))
 	 :: (alpha, (bound'', sigma)) :: q0
        else (beta, (bound', sigma')) :: (find constr alpha' q0)
   in
@@ -155,7 +155,7 @@ let merge q alpha alpha' =
 	     
 
 let is_var = function
-  | SForall ([], (Ty.TVar _)) -> true
+  | S ([], STTy (Ty.TVar _)) -> true
   | _ -> false
 
 let is_useful alpha q sigma =
@@ -186,8 +186,8 @@ let rec unify q t1 t2 = match (t1, t2) with
      let n2 = normal_form s2 in
      begin
        match (n1, n2) with
-       | (SForall ([], Ty.TVar a1), _) -> unify q t2 (Ty.variable a1)
-       | (_, SForall ([], Ty.TVar a2)) -> unify q t1 (Ty.variable a2)
+       | (S ([], STTy (Ty.TVar a1)), _) -> unify q t2 (Ty.variable a1)
+       | (_, S ([], STTy (Ty.TVar a2))) -> unify q t1 (Ty.variable a2)
        | _ ->
 	  begin
 	    if is_useful a1 q s2 || is_useful a2 q s1
@@ -204,13 +204,13 @@ let rec unify q t1 t2 = match (t1, t2) with
 
      begin
        match n1 with
-       | SForall ([], Ty.TVar a1) -> unify q t2 (Ty.variable a1)
+       | S ([], STTy (Ty.TVar a1)) -> unify q t2 (Ty.variable a1)
        | _ ->
 	  begin
-	    if is_useful a1 q (SForall ([], t2))
+	    if is_useful a1 q (ty t2)
 	    then raise Failure ;
-	    let (q', _) = polyunify q s1 (SForall ([], t2)) in
-	    update q' (a1, (BRigid, SForall ([], t2)))
+	    let (q', _) = polyunify q s1 (ty t2) in
+	    update q' (a1, (BRigid, ty t2))
 	  end
      end
   | (_, Ty.TVar a2) -> unify q t2 t1
@@ -220,15 +220,14 @@ let rec unify q t1 t2 = match (t1, t2) with
      
      
 
-
 (* unification algorithm (polytypes) *)
 and polyunify q s1 s2 =
   let s1 = Schema.constructed_form s1 in
   let s2 = Schema.constructed_form s2 in
   match (s1, s2) with
-  | (SBot, s) | (s, SBot) -> (q, s)
-  | (SForall (p1, t1), SForall (p2, t2)) ->
+  | (S (_, STBot), s) | (s, S (_, STBot)) -> (q, s)
+  | (S (p1, STTy t1), S (p2, STTy t2)) ->
      let q_ = List.rev_append p2 (List.rev_append p1 q) in
      let q0 = unify q_ t1 t2 in
      let (q3, q4) = split q0 (fst (List.split q)) in
-     (q3, SForall (q4, t1))
+     (q3, S (q4, STTy t1))

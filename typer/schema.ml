@@ -1,59 +1,59 @@
 type bound =
   | BRigid
   | BFlexible
+
+type schema_terminal =
+  | STBot
+  | STTy of Ty.ty
       
-type schema =
-  | SBot
-  | SForall of constr list * Ty.ty (* TODO : simply use a list,
-                                  there is no problem for bottom,
-                                  as we can say "all alpha = bottom, alpha" *)
+type schema = S of constr list * schema_terminal
  and constr = Var.t * (bound * schema)
 
 			
 type prefix = constr list
-			
-let forall binding = function
-  | SBot -> failwith "No binding over bot"
-  | SForall (l, ty) ->
-     SForall (binding :: l, ty)
 
-let forall_map pref = function
-  | SBot -> failwith "No binding over bot"
-  | SForall (l, ty) ->
-     SForall (List.rev_append pref l, ty)
+let bot = S ([], STBot)
+
+let ty t = S ([], STTy t)
+	    
+let forall binding (S (l, term)) =
+  S (binding :: l, term)
+
+let forall_map pref (S (l, term)) =
+  S (List.rev_append pref l, term)
 	     
+let term_subst var ty = function
+  | STBot -> STBot
+  | STTy ty' -> STTy (Ty.subst var ty ty')
+  
+let rec subst var ty (S (l, term)) =
+  S (List.map (fun (a, (b, s)) -> (a, (b, subst var ty s))) l,
+     term_subst var ty term)
 
-let rec subst var ty = function
-  | SBot ->
-     SBot
-  | SForall (pref, ty') ->
-     SForall (
-	 List.map (fun (a, (b, s)) -> (a, (b, subst var ty s))) pref,
-	 Ty.subst var ty ty'
-       )
-
+let term_proj = function
+  | STBot -> Ty.bot ()
+  | STTy ty -> Ty.skeleton_of_ty ty
+    
 let rec proj = function
-  | SBot ->
-     Ty.bot ()
-  | SForall ([], ty) ->
-     Ty.skeleton_of_ty ty
-  | SForall ((alpha, (_, sigma)) :: pref, ty) ->
-     Ty.subst alpha (proj sigma) (proj (SForall (pref, ty)))
-
+  | S ([], term) ->
+     term_proj term
+  | S ((alpha, (_, sigma)) :: pref, term) ->
+     Ty.subst alpha (proj sigma) (proj (S (pref, term)))
+	      
 let rec is_free var = function
-  | SBot -> false
-  | SForall ([], ty) -> Ty.occur var ty
-  | SForall ((v, (bound, sigma)) :: pref, ty) ->
-     let sigma' = SForall (pref, ty) in
+  | S ([], STBot) -> false
+  | S ([], STTy ty) -> Ty.occur var ty
+  | S ((v, (bound, sigma)) :: pref, term) ->
+     let sigma' = S (pref, term) in
      (v <> var && is_free var sigma') ||
        (is_free v sigma' && is_free var sigma)
 
 
 let rec free_variables = function
-  | SBot -> Var.Set.empty
-  | SForall ([], ty) -> Ty.variables ty	   
-  | SForall ((alpha, (bound, sigma)) :: pref, ty) ->
-     let sigma' = SForall (pref, ty) in
+  | S ([], STBot) -> Var.Set.empty
+  | S ([], STTy ty) -> Ty.variables ty	   
+  | S ((alpha, (bound, sigma)) :: pref, term) ->
+     let sigma' = S (pref, term) in
      let ftvs' = free_variables sigma' in
      if Var.Set.mem alpha ftvs'
      then Var.Set.union (free_variables sigma) (Var.Set.remove alpha (ftvs'))
@@ -61,27 +61,25 @@ let rec free_variables = function
 		       
 
 let rec normal_form = function
-  | SBot -> SBot
-  | SForall ([], t) -> SForall([], t)
-  | SForall ((alpha, (bound, sigma)) :: pref, ty) ->
-     let sigma' = SForall (pref, ty) in
+  | S ([], term) -> S ([], term)
+  | S ((alpha, (bound, sigma)) :: pref, term) ->
+     let sigma' = S (pref, term) in
      let nfsigma  = normal_form sigma  in
      let nfsigma' = normal_form sigma' in
      match (nfsigma, nfsigma') with
-     | (_, SForall ([], (Ty.TVar v))) when v = alpha -> nfsigma
-     | (SForall ([], tau), _) -> subst alpha tau nfsigma'
+     | (_, S ([], STTy (Ty.TVar v))) when v = alpha -> nfsigma
+     | (S ([], STTy tau), _) -> subst alpha tau nfsigma'
      | _ when not (is_free alpha nfsigma') -> nfsigma'
      | _ -> forall (alpha, (bound, nfsigma)) nfsigma'
 
 let rec constructed_form = function
-  | SBot -> SBot
-  | SForall ([], t) -> SForall([], t)
-  | SForall ((alpha, (b, sigma)) :: pref, ty) ->
-     let sigma' = SForall (pref, ty) in
+  | S ([], t) -> S ([], t)
+  | S ((alpha, (b, sigma)) :: pref, term) ->
+     let sigma' = S (pref, term) in
      let ns' = normal_form sigma' in
      match ns' with
-     | SForall([], Ty.TVar beta) when alpha = beta -> constructed_form sigma
-     | _ -> forall (alpha, (b, sigma))  (constructed_form sigma')
+     | S ([], STTy (Ty.TVar beta)) when alpha = beta -> constructed_form sigma
+     | _ -> forall (alpha, (b, sigma)) (constructed_form sigma')
 		    
 (* Split q into (q inter vars) and (q \ vars) *)
 let split q vars =
