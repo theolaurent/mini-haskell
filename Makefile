@@ -1,5 +1,6 @@
 SOURCES = \
 	utils.ml \
+	errors.ml \
 	ast.ml \
 	parser.mly \
 	lexer.mll \

@@ -19,22 +19,23 @@ let file =
   Arg.parse spec set_file usage;
   match !file with Some f -> f | None -> Arg.usage spec usage; exit 1
 
-let open_file () = (* TODO : more relevant messages *)
+let open_f file = (* TODO : more relevant messages *)
   try open_in file
   with Sys_error str -> ( Format.eprintf " %s@." str; exit 1 )
 
-(*
-let report (b,e) =
-  let l = b.Lexing.pos_lnum in
-  let fc = b.Lexing.pos_cnum - b.Lexing.pos_bol + 1 in
-  let lc = e.Lexing.pos_cnum - b.Lexing.pos_bol + 1 in
-  Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file l fc lc
- *)
-
 let () =
-  let c = open_file () in
+  let c = open_f file in
   let lb = Lexing.from_channel c in
-  let _ = Parser.main Lexer.token lb in
+  let module Err = Errors.Init (struct let file = file end) in
+  let module Lex = Lexer.Make (Err) in
+  let module Par = Parser.Make (Err) in
+  let _ = match Par.main Lex.token lb with
+    | Some x -> x
+    | None -> begin
+              List.iter print_endline (Err.get_all ()) ;
+              exit 1 ;
+            end
+  in
   if !parse_only then exit 0;
 
 (*
