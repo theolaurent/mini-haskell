@@ -81,8 +81,20 @@ let rec constructed_form = function
      | S ([], STTy (Ty.TVar beta)) when alpha = beta -> constructed_form sigma
      | _ -> forall (alpha, (b, sigma)) (constructed_form sigma')
 		    
-(* Split q into (q inter vars) and (q \ vars) *)
+(* Split q  *)
 let split q vars =
-  List.partition (fun (x,_) -> List.exists (fun y -> x = y) vars) q
+  let rec impl vars = function
+    | [] -> ([],[])
+    | ((a, (_, s)) as x) :: q ->
+       if Var.Set.mem a vars
+       then
+	 let vars = Var.Set.union (Var.Set.remove a vars) (free_variables s) in 
+	 let (q1, q2) = impl vars q in
+	 (x :: q1, q2)
+       else
+	 let (q1, q2) = impl vars q in
+	 (q1, x :: q2)
+  in impl vars q
+  
 
 		 

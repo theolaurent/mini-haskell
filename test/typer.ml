@@ -2,6 +2,7 @@
 let plus a b = Ast.App (Ast.App (Ast.Const (Ast.CPrim "+"), a), b)
 let lt a b = Ast.App (Ast.App (Ast.Const (Ast.CPrim "<"), a), b)
 let bool_and a b = Ast.App (Ast.App (Ast.Const (Ast.CPrim "&&"), a), b)
+let ast_if c a b = Ast.App (Ast.App (Ast.App (Ast.Const (Ast.CPrim "if"), c), a), b)
 let cint i = Ast.Const (Ast.CInt i)
 let cbool b = Ast.Const (Ast.CBool b)
 let abstr xlist expr = List.fold_right (fun x e -> Ast.Abstr (x,e)) xlist expr
@@ -12,33 +13,71 @@ let y = "y"
 let z = "z"
 let a = "a"
 
+module Primitive = Ast.Primitive
+	  
+let prim : Schema.schema Primitive.t =
+  let ifvar = Var.fresh () in
+  Primitive.empty
+  |> Primitive.add "+" (Schema.ty
+			  (Ty.arrow (Ty.constructor "int" [])
+				    (Ty.arrow (Ty.constructor "int" [])
+					      (Ty.constructor "int" []))))
+  |> Primitive.add "<" (Schema.ty
+			  (Ty.arrow (Ty.constructor "int" [])
+				    (Ty.arrow (Ty.constructor "int" [])
+					      (Ty.constructor "bool" []))))
+  |> Primitive.add "&&" (Schema.ty
+			   (Ty.arrow (Ty.constructor "bool" [])
+				     (Ty.arrow (Ty.constructor "bool" [])
+					       (Ty.constructor "bool" []))))
+  |> Primitive.add "if" (Schema.forall (ifvar, Schema.(BFlexible,bot))
+				       (Schema.ty
+					  (Ty.arrow (Ty.constructor "bool" [])
+						    (Ty.arrow
+						       (Ty.variable ifvar)
+						       (Ty.arrow
+							  (Ty.variable ifvar)
+							  (Ty.variable ifvar))))))
+
+
+
 let t1 =
   let ast = plus (cint 5) (plus (cint 6) (cint 3)) in					  
-  Inference.infer Ast.prim [] [] ast 
+  Inference.infer prim [] [] ast 
 
 let t2 =
   let ast = lt (plus (cint 5) (cint 2)) (cint 2) in
-  Inference.infer Ast.prim [] [] ast
+  Inference.infer prim [] [] ast
 
 let t3 =
   let ast = bool_and (cbool true) (cbool false) in
-  Inference.infer Ast.prim [] [] ast
+  Inference.infer prim [] [] ast
 		  
 		 
 let t4 =
   let ast = bool_and (lt (plus (cint 5) (cint 3)) (cint 25)) (cbool true) in
-  Inference.infer Ast.prim [] [] ast
+  Inference.infer prim [] [] ast
 
 let t5 =
   let ast = abstr [x] (Ast.Var x) in
-  Inference.infer Ast.prim [] [] ast
+  Inference.infer prim [] [] ast
 
 let t6 =
   let ast = abstr [x] (plus (Ast.Var x) (Ast.Var x)) in
-  Inference.infer Ast.prim [] [] ast
+  Inference.infer prim [] [] ast
 		  
 let t7 =  	 
   let ast = abstr [x;y;z;a]
 		  (bool_and (lt (plus (Ast.Var x) (Ast.Var y)) (Ast.Var z)) (Ast.Var a)) in
-  Inference.infer Ast.prim [] [] ast
-
+  Inference.infer prim [] [] ast
+ 
+let t8 =
+  let ast = Ast.App (Ast.Const (Ast.CPrim "if"), cbool true) in
+  Inference.infer prim [] [] ast
+		  
+let t9 =
+  let choose = abstr [x;y] (ast_if (cbool true) (Ast.Var x) (Ast.Var y)) in
+  let id = abstr [x] (Ast.Var x) in
+  let ast = Ast.App (choose, id) in
+  Inference.infer prim [] [] ast
+ 

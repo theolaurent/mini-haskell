@@ -110,7 +110,7 @@ let abstraction_check = AbstrCheck.abstraction_check
 			  
 let update q (alpha, (bound, sigma)) =
   let ftv = free_variables sigma in
-  let (q1, q2) = split q (Var.Set.elements ftv) in
+  let (q1, q2) = split q ftv in
   let rec find_alpha = function
     | [] -> assert false
     | (beta, (bound', sigma')) :: q2_a ->
@@ -169,7 +169,10 @@ let is_useful alpha q sigma =
   let q2 = search q in
   is_free alpha (forall_map q2 sigma)
   
-	   
+let set_of_list l =
+  List.fold_left (fun e var -> Var.Set.add var e) Var.Set.empty l
+
+	  
 (* unification algorithm (monotypes) *)
 let rec unify q t1 t2 = match (t1, t2) with
   | (Ty.TVar a1, Ty.TVar a2) when a1 = a2 -> q
@@ -179,8 +182,12 @@ let rec unify q t1 t2 = match (t1, t2) with
     List.fold_left (fun res (t1, t2) -> unify res t1 t2) q (List.combine l1 l2)
   | (Ty.TConst _, Ty.TConst _) -> raise Failure
   | (Ty.TVar a1, Ty.TVar a2) ->
-     let (b1, s1) = List.assoc a1 q in 
-     let n1 = normal_form s1 in
+      let (b1, s1) =
+	try
+	  List.assoc a1 q
+	with Not_found -> raise Not_found 
+      in
+      let n1 = normal_form s1 in
 
      let (b2, s2) = List.assoc a2 q in
      let n2 = normal_form s2 in
@@ -229,5 +236,5 @@ and polyunify q s1 s2 =
   | (S (p1, STTy t1), S (p2, STTy t2)) ->
      let q_ = List.rev_append p2 (List.rev_append p1 q) in
      let q0 = unify q_ t1 t2 in
-     let (q3, q4) = split q0 (fst (List.split q)) in
+     let (q3, q4) = split q0 (set_of_list (fst (List.split q))) in
      (q3, S (q4, STTy t1))

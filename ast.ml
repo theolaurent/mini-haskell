@@ -30,11 +30,3 @@ type ast = (* on le mettra en prvate ou pas ? *) (* je vois pas trop l'interet d
 
 module Primitive = Map.Make(String);;
 
-let prim : Ty.ty Primitive.t =
-  Primitive.empty
-  |> Primitive.add "+" (Ty.arrow (Ty.constructor "int" [])
-				 (Ty.arrow (Ty.constructor "int" []) (Ty.constructor "int" [])))
-  |> Primitive.add "<" (Ty.arrow (Ty.constructor "int" [])
-				 (Ty.arrow (Ty.constructor "int" []) (Ty.constructor "bool" [])))
-  |> Primitive.add "&&" (Ty.arrow (Ty.constructor "bool" [])
-				  (Ty.arrow (Ty.constructor "bool" []) (Ty.constructor "bool" [])))

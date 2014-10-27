@@ -30,5 +30,5 @@ val normal_form : schema -> schema
 
 val constructed_form : schema -> schema
 			      
-val split : prefix -> Var.t list -> prefix * prefix
+val split : prefix -> Var.Set.t -> prefix * prefix
 					       
