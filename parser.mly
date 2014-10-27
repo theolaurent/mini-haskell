@@ -24,9 +24,9 @@
 %token ELSE IF IN LET CASE THEN RETURN DO OF
 %token LP RP LB RB LBK RBK
 %token COL SCOL COM
-%token BSLASH ARR
+%token BSLASH ARR EQ
 %token OR AND
-%token LT LEQ GT GEQ EQ NEQ
+%token LT LEQ GT GEQ EQEQ NEQ
 %token PLUS MINUS MULT
 %token EOF
 %token LEX_ERROR
@@ -36,7 +36,7 @@
 %nonassoc ARR
 %left OR
 %left AND
-%left LT LEQ GT GEQ EQ NEQ
+%left LT LEQ GT GEQ EQEQ NEQ
 %right COL
 %left PLUS MINUS
 %left MULT
@@ -79,7 +79,7 @@ expr:
 | a = expr LEQ b = expr { map2 (fun a b -> ast_leq a b) a b }
 | a = expr GT b = expr { map2 (fun a b -> ast_gt a b) a b }
 | a = expr GEQ b = expr { map2 (fun a b -> ast_geq a b) a b }
-| a = expr EQ b = expr { map2 (fun a b -> ast_eq a b) a b }
+| a = expr EQEQ b = expr { map2 (fun a b -> ast_eq a b) a b }
 | a = expr NEQ b = expr { map2 (fun a b -> ast_neq a b) a b }
 | a = expr COL b = expr { map2 (fun a b -> ast_cons a b) a b }
 | a = expr PLUS b = expr { map2 (fun a b -> ast_plus a b) a b }
