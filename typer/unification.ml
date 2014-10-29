@@ -183,9 +183,8 @@ let rec unify q t1 t2 = match (t1, t2) with
   | (Ty.TConst _, Ty.TConst _) -> raise Failure
   | (Ty.TVar a1, Ty.TVar a2) ->
       let (b1, s1) =
-	try
-	  List.assoc a1 q
-	with Not_found -> raise Not_found 
+	  try List.assoc a1 q
+	  with Not_found -> raise Not_found
       in
       let n1 = normal_form s1 in
 

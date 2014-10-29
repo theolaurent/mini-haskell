@@ -29,8 +29,9 @@ module OptionM = struct
   let map5 f res1 res2 res3 res4 res5 =
     bind (fun a -> map4 (f a) res2 res3 res4 res5) res1
 
+  (* use fold_right ! fold_left returns the list *)
   let sequence res =
-    List.fold_left (map2 (fun acc r -> r :: acc)) (Some []) res
+    List.fold_right (map2 (fun r acc -> r :: acc)) res (Some [])
 
   let mapn f l = sequence (List.map (map f) l)
 end

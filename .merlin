@@ -1,2 +1,5 @@
 S .
 S typer
+
+B _build
+B _build/typer

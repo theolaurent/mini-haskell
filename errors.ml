@@ -15,8 +15,9 @@ module Init (P:sig val file : string end) : S = struct
                 let fc = b.Lexing.pos_cnum - b.Lexing.pos_bol + 1 in
                 let lc = e.Lexing.pos_cnum - b.Lexing.pos_bol + 1 in
                 (Format.sprintf
-                  "File \"%s\", line %d, characters %d-%d:\n\t\t%s"
-                  P.file l fc lc msg) :: res) [] q
+                   "File \"%s\", line %d, characters %d-%d:\n\t\t%s"
+                   P.file l fc lc msg) :: res) [] q
+    |> List.rev
 end
 
 (* (msg,startpos,endpos) *)

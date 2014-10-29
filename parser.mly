@@ -52,12 +52,12 @@ main:
 
 def0:
 | id = ID0 l = list(ID) EQ e = expr { map (fun e ->
-                                        Def (id, ast_lambda l e)
+                                        (id, ast_lambda l e)
                                       ) e }
 
 def:
 | id = ID l = list(ID) EQ e = expr { map (fun e ->
-                                       (id, ast_lambda l e)
+					  (id, ast_lambda l e)
                                      ) e }
 
 simple_expr:
@@ -93,13 +93,11 @@ expr:
                              { map3 (fun e x y ->
                                      ast_case e x hd tl y)
                                     e x y }
-(*| DO LB l = separated_nonempty_list(SCOL, expr) SCOL RB { List.hd l } *)
-| DO l = bounded_separated_list(LB, SCOL, expr, RB) { List.hd l }
+| DO l = bounded_separated_list(LB, SCOL, expr, RB) { List.fold_left (map2 ast_do) (List.hd l) (List.tl l) }
 | RETURN LP RP { Some (Ast.Const (CUnit)) }
 
 binds:
 | d = def { map (fun x -> [x]) d }
-(*| LB l = separated_nonempty_list(SCOL, def) SCOR RB { sequence l }*)
 | l = bounded_separated_list(LB, SCOL, def, RB) { sequence l }
 
 stopped_separated_list(sep, X, stop):
