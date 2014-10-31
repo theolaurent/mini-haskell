@@ -107,10 +107,10 @@ let () =
   
   if !parse_only then exit 0
   else begin
-      let (_, defsType) = Inference.infer_mutually_recursive_definitions prim [] env defs in
-      List.iter (fun (x,s) ->
-		 Format.fprintf Format.std_formatter "%s <: %a\n"
-				x Printer.print_schema (Schema.normal_form s)) defsType
+        let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs in 
+	List.iter (fun (x,s) ->
+		   Format.fprintf Format.std_formatter "%s <: %a\n"
+   				  x Printer.print_schema (Schema.normal_form s)) defsType
     end
 
 (*

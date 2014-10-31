@@ -2,11 +2,15 @@ open Ast
 open Schema
 open Unification
 
+module IdentSet = Set.Make(String)
+module IdentMap = Set.Make(String)
+module Graph = Graph.Make(String)
+       
 type env = (Var.t * schema) list
 
 let set_of_list l =
   List.fold_left (fun e var -> Var.Set.add var e) Var.Set.empty l
-			    
+		 
 let infer_const prim = function
   | CUnit -> ty (Ty.constructor "unit" [])
   | CChar _ -> ty (Ty.constructor "char" [])
@@ -14,7 +18,7 @@ let infer_const prim = function
   | CBool _ -> ty (Ty.constructor "bool" [])
   | CPrim name -> Primitive.find name prim
 			    
- (* type inference *)
+ (* type inference *) 
 let rec infer prim q env = function
   | Const c -> (q, infer_const prim c)
   | Constructor c -> (q, ty (Ty.constructor c []))
@@ -50,10 +54,45 @@ let rec infer prim q env = function
      let q3 = unify ((beta, (BFlexible, sigma)) :: q2) (Ty.variable alpha) (Ty.variable beta) in
      let (q4, q5) = split q3 (set_of_list (fst (List.split q))) in
      infer prim q4 ((x, S (List.rev q5, STTy (Ty.variable alpha))) :: env) a2 *)
-     let (q1, defs) = infer_mutually_recursive_definitions prim q env l in
+     let (q1, defs) = infer_potentially_mutually_recursive_definitions prim q env l in
      infer prim q1 (defs @ env) expr
 
-
+and infer_potentially_mutually_recursive_definitions prim q env l =
+  let rec add_edges_to g bound x = function
+    | Const _ | Constructor _ -> g
+    | Var y ->
+       if List.exists (fun (z, _) -> z = y) env || IdentSet.mem y bound
+       then g
+       else Graph.add_edge y x g
+    | Abstr (y, a) ->
+       add_edges_to g (IdentSet.add y bound) x a
+    | App (a, b) ->
+       let g = add_edges_to g bound x a in
+       add_edges_to g bound x b
+    | Let (l, b) ->
+       let bound = List.fold_left (fun bound (z, _) -> IdentSet.add z bound) bound l in
+       let g = List.fold_left (fun g (_, a) -> add_edges_to g bound x a) g l in
+       add_edges_to g bound x b
+  in
+  if List.length l = 1
+  then infer_mutually_recursive_definitions prim q env l 
+  else begin
+      let g =
+	List.fold_left
+	  (fun g (x, d) ->
+	   let g = Graph.add_vertex x g in
+	   add_edges_to g (IdentSet.singleton x) x d)
+	  Graph.empty l
+      in
+      let tl = Graph.topologically_sorted_components g in
+      
+      let ls = List.map (List.map (fun x -> (x, List.assoc x l))) tl in
+      List.fold_left
+	(fun (q, vars) l ->
+	 let (q, nv) = infer_mutually_recursive_definitions prim q (vars @ env) l in
+	 (q, nv @ vars)) (q, []) ls	
+    end
+  
 and infer_mutually_recursive_definitions prim q env l =
   let defVar = List.map (fun (x, _) -> (x, Var.fresh ())) l in
   let q1 = List.fold_left (fun q1 (_, a) -> (a, (BFlexible, bot)) :: q1) q defVar in
