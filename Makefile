@@ -1,13 +1,13 @@
-SOURCES = \
-	utils.ml \
-	errors.ml \
-	ast.ml \
-	parser.mly \
-	lexer.mll \
-	main.ml
 
-RESULT = petitghc
+TARGETS=main
+BYTES=$(TARGETS:=.byte)
 
-OCAMLYACC = menhir
+OCAMLBUILD=ocamlbuild
 
--include OCamlMakefile
+.PHONY: byte clean
+
+byte:
+	$(OCAMLBUILD) $(BYTES)
+
+clean:
+	$(OCAMLBUILD) -clean
