@@ -29,7 +29,6 @@
 %token LT LEQ GT GEQ EQEQ NEQ
 %token PLUS MINUS MULT
 %token EOF
-%token LEX_ERROR
 
 %nonassoc IN
 %nonassoc ELSE

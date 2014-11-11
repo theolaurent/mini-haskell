@@ -7,11 +7,21 @@
   open P
 
   let lexing_error msg lexbuf =
-    let () = Err.report ("lexing error: " ^ msg)
-                        (Lexing.lexeme_start_p lexbuf)
-                        (Lexing.lexeme_end_p lexbuf)
-    in LEX_ERROR
+    Err.report ("lexing error: " ^ msg)
+               (Lexing.lexeme_start_p lexbuf)
+               (Lexing.lexeme_end_p lexbuf)
 
+	 
+  let unescape s =
+    let rec impl i =
+      if i < String.length s
+      then begin
+	  if s.[i] = '\\'
+	  then (String.make 1 s.[i+1]) ^ (impl (i + 2))
+	  else (String.make 1 s.[i]) ^ (impl (i + 1))
+	end
+      else ""
+    in impl 0
 
   (* The keywords of the language *)
   let keywords = Hashtbl.create 23
@@ -47,7 +57,7 @@ rule token = parse
   | "False"              { BOOL false }
   | "--"                 { lcomment lexbuf }
   | '\''                 { char lexbuf } (* what about strings ? *)
-  | '\"'                 { string lexbuf }
+  | '\"'                 { string "" lexbuf }
   | "||"                 { OR }
   | "&&"                 { AND }
   | "="                  { EQ }
@@ -72,32 +82,42 @@ rule token = parse
   | '\\'                 { BSLASH }
   | "->"                 { ARR }
   | eof                  { EOF }
-  | _                    { lexing_error "Unknown character" lexbuf }
+  | _                    { lexing_error "Unknown character" lexbuf ; token lexbuf }
 
 and char = parse
-  | (car as c) '\''      { CHAR c }
-  | "\\\\'"             { CHAR '\\' }
-  | "\\\"'"             { CHAR '\"' }
-  | "\\''"              { CHAR '\'' }
-  | "\\n'"              { CHAR '\n' }
-  | "\\t'"              { CHAR '\t' }
-  | '\\' car '\''       { lexing_error "Unknown escape sequence" lexbuf }
-  | car (car)+ '\''     { lexing_error "Too many character literal" lexbuf }
-  | '\''                { lexing_error "Empty character literal" lexbuf }
-  | _                   { lexing_error "Unknown character in character literal" lexbuf }
-                         (* is this error message relevant ? cf \n *)
+	 | (car as c) '\''      { CHAR c }
+	 | "\\\\'"             { CHAR '\\' }
+	 | "\\\"'"             { CHAR '\"' }
+	 | "\\''"              { CHAR '\'' }
+	 | "\\n'"              { CHAR '\n' }
+	 | "\\t'"              { CHAR '\t' }
+	 | '\n'                { lexing_error "Newline in char litteral" lexbuf ;
+				 Lexing.new_line lexbuf ; char lexbuf } 
+	 | '\\' car '\''       { lexing_error "Unknown escape sequence" lexbuf ; CHAR '\000' }
+	 | car                 { lexing_error "Too many character literal" lexbuf ; char lexbuf }
+	 | '\''                { lexing_error "Empty character literal" lexbuf ; CHAR '\000' }
+	 | eof                 { lexing_error "Unterminated char" lexbuf ; EOF }
+	 | _                   { lexing_error "Unknown character in character literal" lexbuf ; char lexbuf }
+(* is this error message relevant ? cf \n *)
 
 (* multi-line strings do not seems to be accepted, is it supposed that way or is it a mistake ? *)
-and string = parse
-  | (car_str* as str) '"'    { STR str }
-  | '\\' car car_str* '"'    { lexing_error "Unknown escape sequence" lexbuf }
-  | _                        { lexing_error "Unknown character in string literal" lexbuf }
+and string str = parse
+	       | '\"'           { STR (unescape str) }
+	       | (car_str as c) { string (str ^ c) lexbuf }
+	       | '\n'           { lexing_error "Newline in string litteral" lexbuf ;
+				  Lexing.new_line lexbuf ; string "" lexbuf
+				}
+	       | '\\'           { lexing_error "Unknown escape sequence" lexbuf ; string "" lexbuf }
+	       | eof            { lexing_error "Unterminated string" lexbuf ; EOF }
+	       | _              { lexing_error "Unknown character in string literal" lexbuf ; string "" lexbuf }
 
 and lcomment = parse
-  | '\n'                 { Lexing.new_line lexbuf ; token lexbuf }
-  | _                    { lcomment lexbuf  }
+	     | '\n'                 { Lexing.new_line lexbuf ; token lexbuf }
+	     | eof                  { lexing_error "Unterminated comment" lexbuf ; EOF }
+	     | _                    { lcomment lexbuf  }
 
-
+			 
+				    
 
 {
   end
