@@ -41,13 +41,19 @@
 %left MULT
 %nonassoc UMINUS
 
-%start <Ast.def list option> main
+%start <Ast.def list> main
 
 %%
 
 main:
-| ds = list(def0) EOF { sequence ds }
-| error EOF           { parsing_error "..." $startpos($1) $endpos($1) }
+| ds = list(def0) EOF {
+  List.fold_right (fun d l ->
+    match d with
+    | Some d -> d :: l
+    | None -> l
+  ) ds []
+}
+| error EOF           { ignore (parsing_error "..." $startpos($1) $endpos($1)) ; [] }
 
 def0:
 | id = ID0 l = list(ID) EQ e = expr { map (fun e ->
@@ -70,6 +76,8 @@ simple_expr:
 expr:
 | l = nonempty_list(simple_expr) { map (fun x -> ast_app (List.hd x) (List.tl x)) (sequence l) }
 | BSLASH l = nonempty_list(ID) ARR e = expr { map (fun e -> ast_lambda l e) e }
+| BSLASH ARR e = expr
+    { parsing_error "Expecting variable(s) in lambda-clause" $startpos($1) $endpos($2) } 
 | MINUS e = expr %prec UMINUS { map (fun x -> ast_unary_minus x) e }
 (* why not a single case for binary operators ? *)
 | a = expr OR b = expr { map2 (fun a b -> ast_or a b) a b }
@@ -92,13 +100,22 @@ expr:
                              { map3 (fun e x y ->
                                      ast_case e x hd tl y)
                                     e x y }
-| DO l = bounded_separated_list(LB, SCOL, expr, RB) { List.fold_left (map2 ast_do) (List.hd l) (List.tl l) }
+| DO l = bounded_separated_list(LB, SCOL, expr, RB)
+    { List.fold_left (map2 ast_do) (List.hd l) (List.tl l) }
+| DO LB SCOL RB 
+	{ parsing_error "do expects one or more expressions" $startpos($2) $endpos($4) }
+| DO LB RB
+	{ parsing_error "do expects one or more expressions" $startpos($2) $endpos($3) }
 | RETURN LP RP { Some (Ast.Const (CUnit)) }
 
 binds:
 | d = def { map (fun x -> [x]) d }
 | l = bounded_separated_list(LB, SCOL, def, RB) { sequence l }
-
+| LB SCOL RB 
+    { parsing_error "let expects one or more bindings" $startpos($1) $endpos($3) }
+| LB RB
+    { parsing_error "let expects one or more bindings" $startpos($1) $endpos($2) } 
+    
 stopped_separated_list(sep, X, stop):
 | x = X ; stop { [x] }
 | x = X ; sep ; stop { [x] }

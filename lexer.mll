@@ -96,7 +96,7 @@ and char = parse
 	 | '\\' car '\''       { lexing_error "Unknown escape sequence" lexbuf ; CHAR '\000' }
 	 | car                 { lexing_error "Too many character literal" lexbuf ; char lexbuf }
 	 | '\''                { lexing_error "Empty character literal" lexbuf ; CHAR '\000' }
-	 | eof                 { lexing_error "Unterminated char" lexbuf ; EOF }
+	 | eof                 { lexing_error "Unterminated char" lexbuf ; CHAR '\000' }
 	 | _                   { lexing_error "Unknown character in character literal" lexbuf ; char lexbuf }
 (* is this error message relevant ? cf \n *)
 
@@ -108,7 +108,7 @@ and string str = parse
 				  Lexing.new_line lexbuf ; string "" lexbuf
 				}
 	       | '\\'           { lexing_error "Unknown escape sequence" lexbuf ; string "" lexbuf }
-	       | eof            { lexing_error "Unterminated string" lexbuf ; EOF }
+	       | eof            { lexing_error "Unterminated string" lexbuf ; STR "" }
 	       | _              { lexing_error "Unknown character in string literal" lexbuf ; string "" lexbuf }
 
 and lcomment = parse

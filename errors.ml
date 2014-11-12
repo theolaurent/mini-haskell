@@ -3,6 +3,7 @@ module type S = sig
     val reset : unit -> unit
     val report : string -> Lexing.position -> Lexing.position -> unit
     val get_all : unit -> string list
+    val has_error_occured : unit -> bool
 end
 
 module Init (P:sig val file : string end) : S = struct
@@ -18,6 +19,9 @@ module Init (P:sig val file : string end) : S = struct
                    "File \"%s\", line %d, characters %d-%d:\n\t\t%s"
                    P.file l fc lc msg) :: res) [] q
     |> List.rev
+
+  let has_error_occured () =
+    not (Queue.is_empty q)
 end
     
   
