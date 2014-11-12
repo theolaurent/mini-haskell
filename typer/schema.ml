@@ -80,7 +80,24 @@ let rec constructed_form = function
      match ns' with
      | S ([], STTy (Ty.TVar beta)) when alpha = beta -> constructed_form sigma
      | _ -> forall (alpha, (b, sigma)) (constructed_form sigma')
-		    
+		   
+let rec rename q s =
+  match s with
+  | S ([], STBot) -> assert false
+  | S ([], STTy t) -> (q, t)
+  | S ((alpha, (b, sigma)) :: pref, term) ->
+     let (q, s) =
+       if List.exists (fun (beta, _) -> alpha = beta) q
+       then begin
+	   let new_alpha = Var.fresh () in
+	   let q = (new_alpha, (b, sigma)) :: q in
+	   let s = subst alpha (Ty.variable new_alpha) (S (pref, term)) in
+	   (q, s)
+	 end
+       else ((alpha, (b, sigma)) :: q, S (pref, term))
+     in
+     rename q s
+       
 (* Split q  *)
 let split q vars =
   let rec impl vars = function

@@ -233,7 +233,10 @@ and polyunify q s1 s2 =
   match (s1, s2) with
   | (S (_, STBot), s) | (s, S (_, STBot)) -> (q, s)
   | (S (p1, STTy t1), S (p2, STTy t2)) ->
-     let q_ = List.rev_append p2 (List.rev_append p1 q) in
+     let (q_, t1) = Schema.rename q s1 in
+     let (q_, t2) = Schema.rename q_ s2 in
+
+     (*     let q_ = List.rev_append p2 (List.rev_append p1 q) in *)
      let q0 = unify q_ t1 t2 in
      let (q3, q4) = split q0 (set_of_list (fst (List.split q))) in
-     (q3, S (q4, STTy t1))
+     (q3, S (List.rev q4, STTy t1))
