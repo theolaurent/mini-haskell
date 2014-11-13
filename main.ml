@@ -19,7 +19,19 @@ let spec =
 let prim = Definitions.prim
 let env = Definitions.env
 
-    
+module CheckMain(Err:Errors.S) =
+  struct
+    let check defs =
+      try
+	let sch = List.assoc "main" defs in
+	let alpha = Var.fresh () in
+	ignore (Unification.unify [(alpha, (Schema.BFlexible, sch))] (Ty.variable alpha) (Ty.constructor "IO" [Ty.constructor "unit" []]))
+      with
+      | Not_found -> Err.report "type error : main is not present" (Lexing.dummy_pos) (Lexing.dummy_pos)
+      | Unification.Failure trace ->
+	 Err.report "type error : While typing main..." (Lexing.dummy_pos) (Lexing.dummy_pos) ; 
+	 List.iter (fun msg -> Err.report ("type error : " ^ msg) (Lexing.dummy_pos) (Lexing.dummy_pos)) trace
+  end
 
     
 let file =
@@ -39,14 +51,15 @@ let open_f file = (* TODO : more relevant messages *)
 let () =
   let c = open_f file in
   let lb = Lexing.from_channel c in
-  let module Err = Errors.Init (struct let file = file end) in
-  let module Lex = Lexer.Make (Err) in
-  let module Par = Parser.Make (Err) in
+  let module SyntaxErr = Errors.Init (struct let file = file end) in
+  let module TypeErr = Errors.Init (struct let file = file end) in
+  let module Lex = Lexer.Make (SyntaxErr) (TypeErr) in
+  let module Par = Parser.Make (SyntaxErr) (TypeErr) in
   let defs = Par.main Lex.token lb in
-  if Err.has_error_occured ()
+  if SyntaxErr.has_error_occured ()
   then 
     begin
-      List.iter print_endline (Err.get_all ()) ;
+      List.iter print_endline (SyntaxErr.get_all ()) ;
       exit 1 ;
     end ;
 
@@ -55,7 +68,18 @@ let () =
   
   if !parse_only then exit 0 ;
   
-  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs in 
+  let module Inference = Inference.Make(TypeErr) in
+  let module CheckMain = CheckMain(TypeErr) in
+  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs in
+  CheckMain.check defsType ;
+
+  if TypeErr.has_error_occured ()
+  then
+    begin
+      List.iter print_endline (TypeErr.get_all ()) ;
+      exit 1
+    end  ;
+  
   if !print_type
   then begin
       List.iter
@@ -63,6 +87,7 @@ let () =
 	 Format.fprintf Format.std_formatter "%s :: %a\n"
    			x Printer.print_schema (Schema.normal_form s.Schema.value)
 	) defsType
+	
     end
 
 (*

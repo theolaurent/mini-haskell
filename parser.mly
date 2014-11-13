@@ -11,10 +11,27 @@
 
        (* TODO : improve error reporting by adding some error
                  cases in the grammar *)
+  let check_uniqueness name spos epos l =
+    let l = List.sort compare l in
+    let rec pred = function
+      | [] | [_] -> []
+      | x :: y :: t ->
+	 if name x = name y
+	 then (x, y) :: pred (y :: t)
+	 else pred (y :: t)
+    in
+    List.iter (fun (x, y) ->
+	       let n = name x in
+	       Err.report ("type error: " ^ "identifier " ^ n ^ " is bound here...") (spos x) (epos x);
+	       Err.report ("type error; " ^ "... but is also bound there") (spos y) (epos y)
+	      ) (pred l)
+	      
+
 %}
 
 %parameter <Err:Errors.S>
-
+%parameter <TypeErr:Errors.S>
+		  
 %token <string> STR
 %token <char> CHAR
 %token <int> INT
@@ -47,6 +64,7 @@
 
 main:
 | ds = list(def0) EOF {
+  
   List.fold_right (fun d l ->
     match d with
     | Some d -> d :: l

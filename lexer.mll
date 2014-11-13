@@ -1,9 +1,9 @@
 (* Lexer for Mini-Haskell *)
 {
 
-  module Make (Err:Errors.S) = struct
+  module Make (Err:Errors.S) (ParseErr:Errors.S) = struct
 
-  module P = Parser.Make (Err)
+  module P = Parser.Make (Err) (ParseErr)
   open P
 
   let lexing_error msg lexbuf =
