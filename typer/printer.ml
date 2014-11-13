@@ -1,4 +1,3 @@
-open Typer
 (* Printers for ast *)
 let print_const ff = function
   | Ast.CUnit -> Format.fprintf ff "()"

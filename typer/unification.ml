@@ -1,6 +1,6 @@
 open Schema
 
-exception Failure
+exception Failure of string list
 exception UpdateFailure
 
 
@@ -172,6 +172,9 @@ let is_useful alpha q sigma =
 let set_of_list l =
   List.fold_left (fun e var -> Var.Set.add var e) Var.Set.empty l
 
+let fail t1 t2 =
+  Format.fprintf (Format.str_formatter) "Failed to unify %a with %a" Printer.print_type t1 Printer.print_type t2 ;
+  raise (Failure [Format.flush_str_formatter ()])
 
 (* unification algorithm (monotypes) *)
 let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
@@ -180,7 +183,7 @@ let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
     when g1 = g2
       && List.length l1 = List.length l2 ->
     List.fold_left (fun res (t1, t2) -> unify res t1 t2) q (List.combine l1 l2)
-  | (Ty.TConst _, Ty.TConst _) -> raise Failure
+  | (Ty.TConst _, Ty.TConst _) ->  fail t1 t2 
   | (Ty.TVar a1, Ty.TVar a2) ->
       let (b1, s1) =
 	List.assoc a1 q
@@ -196,7 +199,7 @@ let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
        | _ ->
 	  begin
 	    if is_useful a1 q s2 || is_useful a2 q s1
-	    then raise Failure ;
+	    then fail t1 t2 ;
 	    let (q', s3) = polyunify q s1 s2 in
 	    let q' = update q' (a1, (b1, s3)) in
 	    let q' = update q' (a2, (b2, s3)) in
@@ -213,17 +216,15 @@ let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
        | _ ->
 	  begin
 	    if is_useful a1 q (ty t2)
-	    then raise Failure ;
-	    let (q', _) = polyunify q s1 (ty t2) in
+	    then fail t1 t2 ;
+ 	    let (q', _) = polyunify q s1 (ty t2) in
 	    update q' (a1, (BRigid, ty t2))
 	  end
      end
   | (_, Ty.TVar a2) -> unify q t2 t1
   | (Ty.TArrow (t11, t12), Ty.TArrow (t21, t22)) ->
      unify (unify q t11 t21) t12 t22
-  | _ -> raise Failure
-
-
+  | _ -> fail t1 t2 
 
 (* unification algorithm (polytypes) *)
 and polyunify q s1 s2 =
