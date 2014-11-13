@@ -1,95 +1,24 @@
 (* Main Program *)
+open Typer
 
 let usage = "usage: petitghc [options] file.hs"
 
 let parse_only = ref false
 let type_only = ref false
-		     
+let print_ast = ref false
+let print_type = ref false
+		    
 let spec =
   [
     "--parse-only", Arg.Set parse_only, "stop after parsing";
     "--type-only", Arg.Set type_only, "stop after typing" ;
+    "--print-ast", Arg.Set print_ast, "output the internal representation" ;
+    "--print-type", Arg.Set print_type, "output type of toplevel identifiers"
   ]
 
-let prim : Schema.schema Ast.Primitive.t =
-  let var = Var.fresh () in
-  let var2 = Var.fresh () in
-  let binop n t r = 
-    Ast.Primitive.add n (Schema.ty
-		       (Ty.arrow (Ty.constructor t [])
-				 (Ty.arrow (Ty.constructor t [])
-		       			   (Ty.constructor r []))))
-  in
-  Ast.Primitive.empty
-  |> binop "plus"  "int"  "int"
-  |> binop "minus" "int"  "int"
-  |> binop "mult"  "int"  "int"
-  |> binop "lt"    "int"  "bool"
-  |> binop "gt"    "int"  "bool"
-  |> binop "leq"   "int"  "bool"
-  |> binop "geq"   "int"  "bool"
-  |> binop "eq"    "int"  "bool"
-  |> binop "neq"   "int"  "bool"
-  |> binop "and"   "bool" "bool"
-  |> binop "or"    "bool" "bool"
-  |> Ast.Primitive.add "unary_minus"
-		   (Schema.ty (Ty.arrow (Ty.constructor "int" []) (Ty.constructor "int" [])))
-  |> Ast.Primitive.add "empty"
-		   (Schema.forall (var, Schema.(BFlexible, bot))
-				  (Schema.ty
-				     (Ty.constructor "list" [Ty.variable var])))
-  |> Ast.Primitive.add "cons"
-		   (Schema.forall
-		      (var, Schema.(BFlexible, bot))
-		      (Schema.ty
-			 (Ty.arrow (Ty.variable var)
-				   (Ty.arrow (Ty.constructor "list" [Ty.variable var])
-					     (Ty.constructor "list" [Ty.variable var])))))
-  |> Ast.Primitive.add "if"
-		   (Schema.forall
-		      (var, Schema.(BFlexible,bot))
-		      (Schema.ty
-			 (Ty.arrow (Ty.constructor "bool" [])
-				   (Ty.arrow (Ty.variable var)
-					     (Ty.arrow (Ty.variable var)
-						       (Ty.variable var))))))
+let prim = Definitions.prim
+let env = Definitions.env
 
-  (* do (do a b) c 'a -> ('b -> 'b) *)
-  |> Ast.Primitive.add "do"
-		       (Schema.forall_map
-			  [(var, Schema.(BFlexible, bot)) ; (var2, Schema.(BFlexible, bot))]
-			  (Schema.ty
-			     (Ty.arrow (Ty.variable var) (Ty.arrow (Ty.variable var2) (Ty.variable var2)))))
-			  
-
-  |> Ast.Primitive.add "match"
-      (Schema.forall_map
-	 [(var, Schema.(BFlexible, bot)) ; (var2, Schema.(BFlexible, bot))]
-	 (Schema.ty
-	    (Ty.arrow (Ty.constructor "list" [Ty.variable var])
-	       (Ty.arrow (Ty.variable var2)
-		  (Ty.arrow
-		     (Ty.arrow (Ty.variable var) (Ty.arrow (Ty.constructor "list" [Ty.variable var]) (Ty.variable var2)))
-		     (Ty.variable var2))))))
-
-let env =
-  let var = Var.fresh () in
-  [
-    ("putChar", Schema.ty (Ty.arrow (Ty.constructor "char" [])
-			     (Ty.constructor "unit" []))) ;
-    ("rem", Schema.ty
-      (Ty.arrow
-	 (Ty.constructor "int" [])
-	 (Ty.arrow (Ty.constructor "int" []) (Ty.constructor "int" [])))) ;
-    ("div", Schema.ty
-      (Ty.arrow
-	 (Ty.constructor "int" [])
-	 (Ty.arrow (Ty.constructor "int" []) (Ty.constructor "int" [])))) ;
-    ("error", Schema.forall (var, Schema.(BFlexible, bot))
-			  (Schema.ty
-			     (Ty.arrow (Ty.constructor "list" [Ty.constructor "char" []])
-				       (Ty.variable var))))
-  ]
     
 
     
@@ -121,16 +50,19 @@ let () =
       exit 1 ;
     end ;
 
-  List.iter (fun (x,b) ->
-    Format.fprintf Format.std_formatter "%s = %a\n" x Printer.print_ast b
-  ) defs ;
+  if !print_ast
+  then Printer.print_def_list Format.std_formatter defs ;
   
-  if !parse_only then exit 0
-  else begin
-        let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs in 
-	List.iter (fun (x,s) ->
-		   Format.fprintf Format.std_formatter "%s <: %a\n"
-   				  x Printer.print_schema (Schema.normal_form s)) defsType
+  if !parse_only then exit 0 ;
+  
+  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs in 
+  if !print_type
+  then begin
+      List.iter
+	(fun (x,s) ->
+	 Format.fprintf Format.std_formatter "%s :: %a\n"
+   			x Printer.print_schema (Schema.normal_form s.Schema.value)
+	) defsType
     end
 
 (*

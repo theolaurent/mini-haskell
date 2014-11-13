@@ -106,7 +106,7 @@ expr:
 	{ parsing_error "do expects one or more expressions" $startpos($2) $endpos($4) }
 | DO LB RB
 	{ parsing_error "do expects one or more expressions" $startpos($2) $endpos($3) }
-| RETURN LP RP { Some (Ast.Const (CUnit)) }
+| RETURN LP RP { Some (Ast.Const (Ast.CPrim "return ()")) }
 
 binds:
 | d = def { map (fun x -> [x]) d }
