@@ -27,6 +27,13 @@
 	      ) (pred l)
 	      
 
+  module Id =
+    struct
+      let name (x, _) = x
+      let spos (_, (s, _)) = s
+      let epos (_, (_, e)) = e
+    end
+	      
 %}
 
 %parameter <Err:Errors.S>
@@ -93,7 +100,11 @@ simple_expr:
 
 expr:
 | l = nonempty_list(simple_expr) { map (fun x -> ast_app (List.hd x) (List.tl x)) (sequence l) }
-| BSLASH l = nonempty_list(ID) ARR e = expr { map (fun e -> ast_lambda l e) e }
+| BSLASH l = nonempty_list(identifier) ARR e = expr {
+						   check_uniqueness Id.name Id.spos Id.epos l ;
+						   let (l, _) = List.split l in 
+						   map (fun e -> ast_lambda l e) e
+					 }
 | BSLASH ARR e = expr
     { parsing_error "Expecting variable(s) in lambda-clause" $startpos($1) $endpos($2) } 
 | MINUS e = expr %prec UMINUS { map (fun x -> ast_unary_minus x) e }
@@ -142,7 +153,12 @@ stopped_separated_list(sep, X, stop):
 bounded_separated_list(start, sep, X, stop):
 | start ; l = stopped_separated_list(sep, X, stop) { l }
 				
-				
+identifier:				
+| i = ID { (i, ($startpos(i), $endpos(i))) }
+
+
+
+
 const:
 | c = CHAR { Some (Const (CChar c)) }
 | i = INT { Some (Const (CInt  i)) }
