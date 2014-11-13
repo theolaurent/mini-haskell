@@ -1,11 +1,15 @@
 type constructor = string
-
-type 'a t = private
+type 'a t =
+    {
+      variables : Var.Set.t ;
+      value : 'a u
+    }      
+ and 'a u = private
 	      TConst of  constructor * ('a t) list
 	    | TVar of Var.t
 	    | TArrow of ('a t) * ('a t)
 	    | TBot
-
+	    
 type ty = [`Ty | `Skeleton] t
 type skeleton = [`Skeleton] t
 	

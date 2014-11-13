@@ -6,50 +6,108 @@ type schema_terminal =
   | STBot
   | STTy of Ty.ty
       
-type schema = S of constr list * schema_terminal
+type schema =
+    {
+      free_variables : Var.Set.t ;
+      value : schema_value
+    }
+ and schema_value = S of constr list * schema_terminal
  and constr = Var.t * (bound * schema)
 
 			
 type prefix = constr list
 
-let bot = S ([], STBot)
+let bot =
+  {
+    free_variables = Var.Set.empty ;
+    value = S ([], STBot)
+  }
 
-let ty t = S ([], STTy t)
+let ty t =
+  { 
+    free_variables = t.Ty.variables ;
+    value = S ([], STTy t)
+  }
+
+let terminal = function
+  | STBot -> bot
+  | STTy t -> ty t
 	    
-let forall binding (S (l, term)) =
-  S (binding :: l, term)
+let forall (alpha, (b, sigma)) sigma' =
+  let free_variables =
+    if Var.Set.mem alpha sigma'.free_variables
+    then Var.Set.union
+	   sigma.free_variables
+	   (Var.Set.remove alpha sigma'.free_variables)
+    else sigma'.free_variables
+  in
+  let value =
+    let S (l, term) = sigma'.value in
+    S ((alpha, (b, sigma)) :: l, term)
+  in
+  { free_variables ; value }
 
-let forall_map pref (S (l, term)) =
-  S (List.rev_append pref l, term)
+
+(* Use fold_left : first of pref depends on following bindings *)
+let forall_map pref sigma =
+  List.fold_left (fun sigma binding -> forall binding sigma) sigma pref
+  
+  (* S (List.rev_append pref l, term) *)
 	     
 let term_subst var ty = function
   | STBot -> STBot
   | STTy ty' -> STTy (Ty.subst var ty ty')
   
-let rec subst var ty (S (l, term)) =
-  S (List.map (fun (a, (b, s)) -> (a, (b, subst var ty s))) l,
-     term_subst var ty term)
+let rec subst var ty sigma =
+  if Var.Set.mem var sigma.free_variables
+  then
+    {
+      free_variables =
+	Var.Set.(union ty.Ty.variables (remove var sigma.free_variables)) ;
+      value =
+	let S (pref, term) = sigma.value in
+	let pref = List.map (fun (a, (b, s)) -> (a, (b, subst var ty s))) pref in
+	let term = term_subst var ty term in
+	S (pref, term)		  
+    }
+  else begin
+      {
+	free_variables = sigma.free_variables ;
+	value =
+	  let S (pref, term) = sigma.value in
+	  let pref = List.map (fun (a, (b, s)) -> (a, (b, subst var ty s))) pref in
+	  S (pref, term)
+      }
+    end
+
+
+  (*  S (List.map (fun (a, (b, s)) -> (a, (b, subst var ty s))) l,
+     term_subst var ty term) *)
 
 let term_proj = function
   | STBot -> Ty.bot ()
   | STTy ty -> Ty.skeleton_of_ty ty
-    
+
 let rec proj = function
   | S ([], term) ->
      term_proj term
   | S ((alpha, (_, sigma)) :: pref, term) ->
-     Ty.subst alpha (proj sigma) (proj (S (pref, term)))
-	      
-let rec is_free var = function
+     Ty.subst alpha (proj sigma.value) (proj (S (pref, term)))
+   	      
+let is_free var sigma =
+  Var.Set.mem var sigma.free_variables
+  (*function
   | S ([], STBot) -> false
   | S ([], STTy ty) -> Ty.occur var ty
   | S ((v, (bound, sigma)) :: pref, term) ->
      let sigma' = S (pref, term) in
      (v <> var && is_free var sigma') ||
        (is_free v sigma' && is_free var sigma)
+   *)
 
-
-let rec free_variables = function
+let free_variables sigma =
+  sigma.free_variables
+  (*function
   | S ([], STBot) -> Var.Set.empty
   | S ([], STTy ty) -> Ty.variables ty	   
   | S ((alpha, (bound, sigma)) :: pref, term) ->
@@ -58,29 +116,30 @@ let rec free_variables = function
      if Var.Set.mem alpha ftvs'
      then Var.Set.union (free_variables sigma) (Var.Set.remove alpha (ftvs'))
      else ftvs'
-		       
+   *)		       
 
 let rec normal_form = function
-  | S ([], term) -> S ([], term)
-  | S ((alpha, (bound, sigma)) :: pref, term) ->
-     let sigma' = S (pref, term) in
-     let nfsigma  = normal_form sigma  in
-     let nfsigma' = normal_form sigma' in
-     match (nfsigma, nfsigma') with
-     | (_, S ([], STTy (Ty.TVar v))) when v = alpha -> nfsigma
-     | (S ([], STTy tau), _) -> subst alpha tau nfsigma'
-     | _ when not (is_free alpha nfsigma') -> nfsigma'
-     | _ -> forall (alpha, (bound, nfsigma)) nfsigma'
+  | S ([], term) -> terminal term
+    | S ((alpha, (bound, sigma)) :: pref, term) ->
+       let sigma' = S (pref, term) in
+       let nfsigma  = normal_form sigma.value  in
+       let nfsigma' = normal_form sigma' in
+       match (nfsigma.value, nfsigma'.value) with
+       | (_, S ([], STTy {Ty.value = Ty.TVar v ; _ })) when v = alpha -> nfsigma
+       | (S ([], STTy tau), _) -> subst alpha tau nfsigma'
+       | _ when not (is_free alpha nfsigma') -> nfsigma'
+       | _ -> forall (alpha, (bound, nfsigma)) nfsigma'
 
 let rec constructed_form = function
-  | S ([], t) -> S ([], t)
+  | S ([], t) -> terminal t
   | S ((alpha, (b, sigma)) :: pref, term) ->
      let sigma' = S (pref, term) in
      let ns' = normal_form sigma' in
-     match ns' with
-     | S ([], STTy (Ty.TVar beta)) when alpha = beta -> constructed_form sigma
+     match ns'.value with
+     | S ([], STTy {Ty.value = Ty.TVar beta ; _}) when alpha = beta ->
+	constructed_form sigma.value
      | _ -> forall (alpha, (b, sigma)) (constructed_form sigma')
-		   
+
 let rec rename q s =
   match s with
   | S ([], STBot) -> assert false
@@ -91,8 +150,11 @@ let rec rename q s =
        then begin
 	   let new_alpha = Var.fresh () in
 	   let q = (new_alpha, (b, sigma)) :: q in
-	   let s = subst alpha (Ty.variable new_alpha) (S (pref, term)) in
-	   (q, s)
+	   let s =
+	     subst alpha (Ty.variable new_alpha)
+		   (forall_map (List.rev pref) (terminal term))
+	   in
+	   (q, s.value)
 	 end
        else ((alpha, (b, sigma)) :: q, S (pref, term))
      in

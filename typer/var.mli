@@ -1,4 +1,4 @@
-type t
+type t = int
 val fresh : unit -> t
 val to_string : t -> string
 		       

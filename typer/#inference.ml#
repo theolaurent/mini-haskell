@@ -32,7 +32,7 @@ let rec infer prim q env = function
      (q3,
       forall_map q4
 		 (forall (beta, (BFlexible, sigma))    
-			 (ty  (Ty.arrow (Ty.variable alpha) (Ty.variable beta)))))
+			 ty  (Ty.arrow (Ty.variable alpha) (Ty.variable beta))))
   | App (a, b) ->
      let (q1, sigma_a) = infer prim q env a in
      let (q2, sigma_b) = infer prim q1 env b in
@@ -106,7 +106,7 @@ and infer_mutually_recursive_definitions prim q env l =
 		    ) l (q1, [])
   in
 
-  let bodyVar = List.map (fun sigma -> (Schema.normal_form sigma.value, Var.fresh ())) sigmaList in
+  let bodyVar = List.map (fun sigma -> (Schema.normal_form sigma, Var.fresh ())) sigmaList in
   let q3 =
     List.fold_left (fun q3 (sigma, beta) -> (beta, (BFlexible, sigma)) :: q3) q2 bodyVar
   in
@@ -116,6 +116,5 @@ and infer_mutually_recursive_definitions prim q env l =
 		    ) q3  defVar bodyVar
   in
   let (q5, q6) = split q4 (set_of_list (fst (List.split q))) in
-  (q5, (List.map (fun (x,alpha) -> (x, forall_map q6 (ty (Ty.variable alpha)))) defVar))
-
- 
+  (q5,
+   List.map (fun (x,alpha) -> (x, forall_map q6, STTy (Ty.variable alpha)))) defVar))

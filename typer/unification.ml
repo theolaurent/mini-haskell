@@ -9,8 +9,8 @@ exception UpdateFailure
 let rec subst_extracted = function
   | [] -> (fun x -> x)
   | (alpha, (_, sigma)) :: q ->
-     let nfsigma = normal_form sigma in
-     match nfsigma with
+     let nfsigma = normal_form sigma.value in
+     match nfsigma.value with
      | S ([], STTy ty) -> (fun y -> subst_extracted q (subst alpha ty y))
      | _ -> subst_extracted q
 
@@ -59,16 +59,16 @@ The goal is to check that leading abstractions have not been modified between sc
     | S ([], STTy _) ->
        poly
     | S ((alpha, (bound, sigma)) :: pref, t) ->
-       let sigma' = S (pref, t) in
+       let sigma' = forall_map (List.rev pref) (Schema.terminal t) in
        if not (is_free alpha sigma')
-       then modify_polynom poly modif coefs a sigma'
-       else if normal_form sigma = ty (Ty.variable alpha)
-       then modify_polynom poly modif coefs a sigma
+       then modify_polynom poly modif coefs a sigma'.value
+       else if normal_form sigma.value = ty (Ty.variable alpha)
+       then modify_polynom poly modif coefs a sigma.value
      else begin
-	 let poly = modify_polynom poly modif coefs a sigma' in
+	 let poly = modify_polynom poly modif coefs a sigma'.value in
 	 let (c1, c2, c3) = coefs in
 	 let (a1, a2, a3) = star a bound in
-	 modify_polynom poly modif (c1 + a1, c2 + a2, c3 + a3) (a1, a2, a3) sigma
+	 modify_polynom poly modif (c1 + a1, c2 + a2, c3 + a3) (a1, a2, a3) sigma.value
        end
 
   let is_monotype = function
@@ -77,18 +77,18 @@ The goal is to check that leading abstractions have not been modified between sc
 
 
   let rec abstraction_check q sigma1 sigma2 =
-    let p1 = proj (forall_map q sigma1) in
-    let p2 = proj (forall_map q sigma2) in
+    let p1 = proj (forall_map q sigma1).value in
+    let p2 = proj (forall_map q sigma2).value in
     if p1 <> p2
     then false
     else begin
 	let ext_sub = subst_extracted q in
-	let nf1 = normal_form sigma1 in
-	let nf2 = normal_form sigma2 in
-	if is_monotype (ext_sub nf1)
+	let nf1 = normal_form sigma1.value in
+	let nf2 = normal_form sigma2.value in
+	if is_monotype (ext_sub nf1).value
 	then true
-      else match ext_sub nf2 with
-	   | S ([], STTy (Ty.TVar v)) ->
+      else match (ext_sub nf2).value with
+	   | S ([], STTy {Ty.value = Ty.TVar v ; _}) ->
 	      begin
 		try
 		  let (bound, sigma) = List.assoc v q in
@@ -99,8 +99,8 @@ The goal is to check that leading abstractions have not been modified between sc
 		  false
 	      end
 	   | _ ->
-	      let poly = modify_polynom Polynom.empty succ (0, 0, 0) (1, 0, 0) sigma1  in
-	      let poly = modify_polynom poly          pred (0, 0, 0) (1, 0, 0) sigma2 in
+	      let poly = modify_polynom Polynom.empty succ (0, 0, 0) (1, 0, 0) sigma1.value in
+	      let poly = modify_polynom poly          pred (0, 0, 0) (1, 0, 0) sigma2.value in
 	      Polynom.for_all (fun (cx, _, _) v -> v = 0 || cx = 0) poly
       end
 end
@@ -155,7 +155,7 @@ let merge q alpha alpha' =
 
 
 let is_var = function
-  | S ([], STTy (Ty.TVar _)) -> true
+  | S ([], STTy {Ty.value = Ty.TVar _ ; _}) -> true
   | _ -> false
 
 let is_useful alpha q sigma =
@@ -174,7 +174,7 @@ let set_of_list l =
 
 
 (* unification algorithm (monotypes) *)
-let rec unify q t1 t2 = match (t1, t2) with
+let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
   | (Ty.TVar a1, Ty.TVar a2) when a1 = a2 -> q
   | (Ty.TConst (g1, l1), Ty.TConst (g2, l2))
     when g1 = g2
@@ -183,16 +183,16 @@ let rec unify q t1 t2 = match (t1, t2) with
   | (Ty.TConst _, Ty.TConst _) -> raise Failure
   | (Ty.TVar a1, Ty.TVar a2) ->
       let (b1, s1) =
-	      List.assoc a1 q
+	List.assoc a1 q
       in
-      let n1 = normal_form s1 in
+      let n1 = normal_form s1.value in
 
      let (b2, s2) = List.assoc a2 q in
-     let n2 = normal_form s2 in
+     let n2 = normal_form s2.value in
      begin
-       match (n1, n2) with
-       | (S ([], STTy (Ty.TVar a1)), _) -> unify q t2 (Ty.variable a1)
-       | (_, S ([], STTy (Ty.TVar a2))) -> unify q t1 (Ty.variable a2)
+       match (n1.value, n2.value) with
+       | (S ([], STTy {Ty.value = Ty.TVar a1 ; _}), _) -> unify q t2 (Ty.variable a1)
+       | (_, S ([], STTy {Ty.value = Ty.TVar a2 ; _})) -> unify q t1 (Ty.variable a2)
        | _ ->
 	  begin
 	    if is_useful a1 q s2 || is_useful a2 q s1
@@ -205,11 +205,11 @@ let rec unify q t1 t2 = match (t1, t2) with
      end
   | (Ty.TVar a1, _) ->
      let (b1, s1) = List.assoc a1 q in
-     let n1 = normal_form s1 in
+     let n1 = normal_form s1.value in
 
      begin
-       match n1 with
-       | S ([], STTy (Ty.TVar a1)) -> unify q t2 (Ty.variable a1)
+       match n1.value with
+       | S ([], STTy {Ty.value = Ty.TVar a1 ; _}) -> unify q t2 (Ty.variable a1)
        | _ ->
 	  begin
 	    if is_useful a1 q (ty t2)
@@ -227,15 +227,16 @@ let rec unify q t1 t2 = match (t1, t2) with
 
 (* unification algorithm (polytypes) *)
 and polyunify q s1 s2 =
-  let s1 = Schema.constructed_form s1 in
-  let s2 = Schema.constructed_form s2 in
-  match (s1, s2) with
-  | (S (_, STBot), s) | (s, S (_, STBot)) -> (q, s)
+  let s1 = Schema.constructed_form s1.value in
+  let s2 = Schema.constructed_form s2.value in
+  match (s1.value, s2.value) with
+  | (S (_, STBot), _) -> (q, s2)
+  | (_, S (_, STBot)) -> (q, s1)
   | (S (p1, STTy t1), S (p2, STTy t2)) ->
-     let (q_, t1) = Schema.rename q s1 in
-     let (q_, t2) = Schema.rename q_ s2 in
+     let (q_, t1) = Schema.rename q s1.value in
+     let (q_, t2) = Schema.rename q_ s2.value in
 
      (*     let q_ = List.rev_append p2 (List.rev_append p1 q) in *)
      let q0 = unify q_ t1 t2 in
      let (q3, q4) = split q0 (set_of_list (fst (List.split q))) in
-     (q3, S (List.rev q4, STTy t1))
+     (q3, forall_map q4 (ty t1))

@@ -1,53 +1,78 @@
 type constructor = string
-		
+
+		     
 type 'a t =
+    {
+      variables: Var.Set.t ;
+      value: 'a u
+    }
+and 'a u =
   | TConst of  constructor * ('a t) list
   | TVar of Var.t
   | TArrow of ('a t) * ('a t)
-  | TBot
+  | TBot 
 
 type ty = [`Ty | `Skeleton] t
 type skeleton = [`Skeleton] t
-
+type skeleton_value = [`Skeleton] u
+			    
 let constructor constr types =
-  TConst (constr, types)
+  {
+    variables = List.fold_left
+		  (fun s t -> Var.Set.union s t.variables)
+		  Var.Set.empty types ;
+    value = TConst (constr, types)
+  }
 
 let variable v =
-  TVar v
+  {
+    variables = Var.Set.singleton v;
+    value = TVar v
+  }
 
 let arrow dom codom =
-  TArrow (dom, codom)
+  {
+    variables = Var.Set.union dom.variables codom.variables ;
+    value = TArrow (dom, codom)
+  }
 
 let bot () =
-  TBot
+  {
+    variables = Var.Set.empty ;
+    value = TBot
+  }
 
 let skeleton_of_ty ty =
-  (ty :> skeleton)
-    
+  {
+    variables = ty.variables ;
+    value = (ty.value :> skeleton_value)
+  }
 
-let rec subst var ty = function
-  | TConst (constr, types) ->
-     TConst (constr, List.map (subst var ty) types)
-  | TVar v when v = var ->
-     ty
-  | TVar v ->
-     TVar v
-  | TArrow (domain, codomain) ->
-     TArrow (subst var ty domain, subst var ty codomain)
-  | TBot ->
-     TBot
-
-let rec occur var = function
-  | TConst (_, types) ->
-     List.exists (occur var) types
-  | TVar v ->
-     var = v
-  | TArrow (domain, codomain) ->
-     occur var domain || occur var codomain
-  | TBot ->
-     false
-
-let rec variables = function
+let rec subst var ty t =
+  if Var.Set.mem var t.variables
+  then begin
+      match t.value with
+      | TConst (constr, types) ->
+	 let types = List.map (subst var ty) types in
+	 constructor constr types
+      | TVar v when v = var ->
+	 ty
+      | TVar v ->
+	 variable v
+      | TArrow (domain, codomain) ->
+	 arrow (subst var ty domain) (subst var ty codomain)
+      | TBot ->
+	 bot ()
+    end
+  else t
+	 
+let occur var t =
+  Var.Set.mem var t.variables
+  
+let variables t =
+  t.variables
+(*
+  function
   | TConst (constr, types) ->
      List.fold_left
 	Var.Set.union Var.Set.empty (List.map variables types)
@@ -56,7 +81,7 @@ let rec variables = function
      Var.Set.union (variables a) (variables b)
   | TBot ->
      Var.Set.empty
-
+ *)
 
 
 (*
@@ -97,8 +122,5 @@ type skeleton =
   | SkBot
   | SkConst of tconst * skeleton list
   | SkVar of Var.t
-  | SkArrow of skeleton * skeleton
+  | SkArrow of skeleton 
  *)
-
-       
-       
