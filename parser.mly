@@ -22,8 +22,8 @@
     in
     List.iter (fun (x, y) ->
 	       let n = name x in
-	       Err.report ("type error: " ^ "identifier " ^ n ^ " is bound here...") (spos x) (epos x);
-	       Err.report ("type error; " ^ "... but is also bound there") (spos y) (epos y)
+	       TypeErr.report ("type error: " ^ "identifier " ^ n ^ " is bound here...") (spos x) (epos x);
+	       TypeErr.report ("type error; " ^ "... but is also bound there") (spos y) (epos y)
 	      ) (pred l)
 	      
 

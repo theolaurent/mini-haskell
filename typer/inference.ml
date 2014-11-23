@@ -27,6 +27,12 @@ let infer_const prim = function
   | CBool _ -> ty (Ty.constructor "bool" [])
   | CPrim name -> Primitive.find name prim
 
+let msg_variable_not_found x =
+  Format.fprintf (Format.str_formatter) "Variable %s was not declared"
+		 x ;
+  Format.flush_str_formatter ()
+		 
+				 
 let msg_fail_app fn arg =
   Format.fprintf (Format.str_formatter) "While applying %a to %a..."
 		 Printer.print_ast arg
@@ -40,7 +46,13 @@ module Make(Err:Errors.S) =
     let rec infer prim q env = function
       | Const c -> (q, infer_const prim c)
       | Constructor c -> (q, ty (Ty.constructor c []))
-      | Var x -> (q, List.assoc x env)
+      | Var x ->
+	 begin
+	   try
+	     (q, List.assoc x env)
+	   with Not_found ->
+		raise (Unification.Failure [msg_variable_not_found x])
+	 end 
       | Abstr (x, a) ->
 	 let alpha = Var.fresh () in
 	 let q1 = (alpha, (BFlexible, bot)) :: q in
