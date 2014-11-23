@@ -21,7 +21,8 @@ module Primitive = Map.Make(String);;
 
 type def = var * ast
 
-let rec primitive str l = List.fold_left (fun res expr -> App (res, expr)) (Const (CPrim str)) l
+let primitive str l =
+  List.fold_left (fun res expr -> App (res, expr)) (Const (CPrim str)) l
 
 
 let ast_if c x y = primitive "if" [ c ; x ; y ]
@@ -41,7 +42,8 @@ let ast_geq x y = primitive "geq" [x ; y]
 let ast_eq x y = primitive "eq" [x ; y]
 let ast_neq x y = primitive "neq" [x ; y]
 
-let rec ast_list l = (List.fold_right (fun x res -> primitive "cons" [ x ; res ])) l ast_empty
+let ast_list l =
+  (List.fold_right (fun x res -> primitive "cons" [ x ; res ])) l ast_empty
 
 let ast_let l expr =
   (* List.fold_right (fun (x,y) e -> Let (x,y, e)) l expr *)

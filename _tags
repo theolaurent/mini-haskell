@@ -1,4 +1,3 @@
 true : use_menhir
 
-
-
+<**/*.ml> or <main.{{p.,}native,{d.,}byte}> : package(ocamlgraph)

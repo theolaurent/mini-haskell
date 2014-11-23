@@ -1,5 +1,7 @@
 S .
 S typer
 
+P ocamlgraph
+
 B _build
 B _build/typer

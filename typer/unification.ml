@@ -154,10 +154,6 @@ let merge q alpha alpha' =
   find2 q
 
 
-let is_var = function
-  | S ([], STTy {Ty.value = Ty.TVar _ ; _}) -> true
-  | _ -> false
-
 let is_useful alpha q sigma =
   let rec search = function
     | [] -> assert false
@@ -207,7 +203,7 @@ let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
 	  end
      end
   | (Ty.TVar a1, _) ->
-     let (b1, s1) = List.assoc a1 q in
+     let (_, s1) = List.assoc a1 q in
      let n1 = normal_form s1.value in
 
      begin
@@ -221,7 +217,7 @@ let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
 	    update q' (a1, (BRigid, ty t2))
 	  end
      end
-  | (_, Ty.TVar a2) -> unify q t2 t1
+  | (_, Ty.TVar _) -> unify q t2 t1
   | (Ty.TArrow (t11, t12), Ty.TArrow (t21, t22)) ->
      unify (unify q t11 t21) t12 t22
   | _ -> fail t1 t2 
@@ -233,7 +229,7 @@ and polyunify q s1 s2 =
   match (s1.value, s2.value) with
   | (S (_, STBot), _) -> (q, s2)
   | (_, S (_, STBot)) -> (q, s1)
-  | (S (p1, STTy t1), S (p2, STTy t2)) ->
+  | (S (_, STTy _), S (_, STTy _)) ->
      let (q_, t1) = Schema.rename q s1.value in
      let (q_, t2) = Schema.rename q_ s2.value in
 
