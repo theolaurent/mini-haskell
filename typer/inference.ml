@@ -4,7 +4,16 @@ open Unification
 
 module IdentSet = Set.Make(String)
 module IdentMap = Set.Make(String)
-module Graph = Graph.Make(String)
+
+module G =
+  Graph.Persistent.Digraph.Concrete
+    (struct
+      type t = string
+      let compare = compare
+      let hash = Hashtbl.hash
+      let equal = (=)
+    end)
+module Components = Graph.Components.Make(G)
        
 type env = (Var.t * schema) list
 
@@ -72,22 +81,22 @@ module Make(Err:Errors.S) =
 	 let (q1, defs) = infer_potentially_mutually_recursive_definitions prim q env l in
 	 infer prim q1 (defs @ env) expr
 	       
-    and infer_potentially_mutually_recursive_definitions prim q env l =
-      let rec add_edges_to g bound x = function
+    and infer_potentially_mutually_recursive_definitions prim q env l =      
+      let rec add_edges_from g bound x = function
 	| Const _ | Constructor _ -> g
 	| Var y ->
 	   if List.exists (fun (z, _) -> z = y) env || IdentSet.mem y bound
 	   then g
-	   else Graph.add_edge y x g
+	   else G.add_edge g x y
 	| Abstr (y, a) ->
-	   add_edges_to g (IdentSet.add y bound) x a
+	   add_edges_from g (IdentSet.add y bound) x a
 	| App (a, b) ->
-	   let g = add_edges_to g bound x a in
-	   add_edges_to g bound x b
+	   let g = add_edges_from g bound x a in
+	   add_edges_from g bound x b
 	| Let (l, b) ->
 	   let bound = List.fold_left (fun bound (z, _) -> IdentSet.add z bound) bound l in
-	   let g = List.fold_left (fun g (_, a) -> add_edges_to g bound x a) g l in
-	   add_edges_to g bound x b
+	   let g = List.fold_left (fun g (_, a) -> add_edges_from g bound x a) g l in
+	   add_edges_from g bound x b
       in
       if List.length l = 1
       then infer_mutually_recursive_definitions prim q env l 
@@ -95,11 +104,11 @@ module Make(Err:Errors.S) =
 	  let g =
 	    List.fold_left
 	      (fun g (x, d) ->
-	       let g = Graph.add_vertex x g in
-	       add_edges_to g (IdentSet.singleton x) x d)
-	      Graph.empty l
+	       let g = G.add_vertex g x in
+	       add_edges_from g (IdentSet.singleton x) x d)
+	      G.empty l
 	  in
-	  let tl = Graph.topologically_sorted_components g in
+	  let tl = Components.scc_list g in
 	  
 	  let ls = List.map (List.map (fun x -> (x, List.assoc x l))) tl in
 	  List.fold_left
@@ -120,7 +129,7 @@ module Make(Err:Errors.S) =
 			  ) l (q1, [])
 	in
 	
-	let bodyVar = List.map (fun sigma -> (Schema.normal_form sigma.value, Var.fresh ())) sigmaList in
+	let bodyVar = List.map (fun sigma -> (normal_form sigma.value, Var.fresh ())) sigmaList in
 	let q3 =
 	  List.fold_left (fun q3 (sigma, beta) -> (beta, (BFlexible, sigma)) :: q3) q2 bodyVar
 	in
@@ -133,8 +142,9 @@ module Make(Err:Errors.S) =
 	(q5, (List.map (fun (x,alpha) -> (x, forall_map q6 (ty (Ty.variable alpha)))) defVar))
       with Unification.Failure trace ->
 	List.iter (fun msg -> Err.report ("type error : " ^ msg) (Lexing.dummy_pos) (Lexing.dummy_pos)) trace ;
-	let defVar = List.map (fun (x, _) ->
-			       let v = Var.fresh () in
-			       (x, forall (v, Schema.(BFlexible, bot)) (ty (Ty.variable v)))) l in
+	let defVar = List.map
+		       (fun (x, _) ->
+			let v = Var.fresh () in
+			(x, forall (v, (BFlexible, bot)) (ty (Ty.variable v)))) l in
 	(q, defVar)
   end
