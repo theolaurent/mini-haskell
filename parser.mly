@@ -105,8 +105,10 @@ expr:
 						   let (l, _) = List.split l in 
 						   map (fun e -> ast_lambda l e) e
 					 }
-| BSLASH ARR e = expr
-    { parsing_error "Expecting variable(s) in lambda-clause" $startpos($1) $endpos($2) } 
+| BSLASH ARR expr
+	 {
+	   parsing_error "Expecting variable(s) in lambda-clause" $startpos($1) $endpos($2)
+	 } 
 | MINUS e = expr %prec UMINUS { map (fun x -> ast_unary_minus x) e }
 (* why not a single case for binary operators ? *)
 | a = expr OR b = expr { map2 (fun a b -> ast_or a b) a b }
@@ -129,7 +131,7 @@ expr:
                              { map3 (fun e x y ->
                                      ast_case e x hd tl y)
                                     e x y }
-| DO l = bounded_separated_list(LB, SCOL, expr, RB)
+| DO LB l = opt_separated_list(SCOL, expr) RB
     { List.fold_left (map2 ast_do) (List.hd l) (List.tl l) }
 | DO LB SCOL RB 
 	{ parsing_error "do expects one or more expressions" $startpos($2) $endpos($4) }
@@ -139,19 +141,16 @@ expr:
 
 binds:
 | d = def { map (fun x -> [x]) d }
-| l = bounded_separated_list(LB, SCOL, def, RB) { sequence l }
+| LB l = opt_separated_list(SCOL, def) RB { sequence l }
 | LB SCOL RB 
     { parsing_error "let expects one or more bindings" $startpos($1) $endpos($3) }
 | LB RB
     { parsing_error "let expects one or more bindings" $startpos($1) $endpos($2) } 
     
-stopped_separated_list(sep, X, stop):
-| x = X ; stop { [x] }
-| x = X ; sep ; stop { [x] }
-| x = X ; sep ; l = stopped_separated_list(sep, X, stop) { x :: l }
-				
-bounded_separated_list(start, sep, X, stop):
-| start ; l = stopped_separated_list(sep, X, stop) { l }
+opt_separated_list(sep, X):
+| x = X ; sep? { [x] }
+| x = X ; sep ; l = opt_separated_list(sep, X) { x :: l }
+
 				
 identifier:				
 | i = ID { (i, ($startpos(i), $endpos(i))) }

@@ -51,9 +51,13 @@
 
 let digit = ['0'-'9']
 let ident = ['a'-'z'] ([ 'a'-'z'] | ['A'-'Z'] | '_' | '\'' | ['0'-'9' ])*
+let car = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t"
+
+	      (*
 let car = (['\032' - '\126'] # ['\\' '\'']) (* what about \' ?? *)
 let car_str = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t" | "\'"
-
+ *)
+	      
 rule token = parse
   | [' ' '\t' '\r']      { token lexbuf }
   | '\n'                 { Lexing.new_line lexbuf ; token lexbuf }
@@ -96,12 +100,13 @@ rule token = parse
   | _                    { lexing_error "Unknown character" lexbuf ; token lexbuf }
 
 and char = parse
-  | (car as c) '\''      { CHAR c }
-  | "\\\\'"             { CHAR '\\' }
+  | (car as c) '\''      { CHAR (unescape_char c) }
+(*  | "\\\\'"             { CHAR '\\' }
   | "\\\"'"             { CHAR '\"' }
   | "\\''"              { CHAR '\'' }
   | "\\n'"              { CHAR '\n' }
   | "\\t'"              { CHAR '\t' }
+ *)
   | '\n'                { lexing_error "Newline in char litteral" lexbuf ;
 			  Lexing.new_line lexbuf ; char lexbuf } 
   | '\\' car '\''       { lexing_error "Unknown escape sequence" lexbuf ; CHAR '\000' }
@@ -113,7 +118,7 @@ and char = parse
 
 and string str = parse
   | '\"'           { STR (unescape str) }
-  | (car_str as c) { string (c :: str) lexbuf }
+  | (car (*_str*) as c) { string (c :: str) lexbuf }
   | '\n'           { lexing_error "Newline in string litteral" lexbuf ;
 		     Lexing.new_line lexbuf ; string [] lexbuf
 		   }
