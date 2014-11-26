@@ -56,6 +56,7 @@ let () =
   let module Lex = Lexer.Make (SyntaxErr) (TypeErr) in
   let module Par = Parser.Make (SyntaxErr) (TypeErr) in
   let defs = Par.main Lex.token lb in
+
   if SyntaxErr.has_error_occured ()
   then 
     begin
@@ -66,7 +67,8 @@ let () =
   if !print_ast
   then Printer.print_def_list Format.std_formatter defs ;
   
-  if !parse_only then exit 0 ;
+  if !parse_only
+  then exit 0 ;
   
   let module Inference = Inference.Make(TypeErr) in
   let module CheckMain = CheckMain(TypeErr) in
@@ -81,34 +83,12 @@ let () =
     end  ;
   
   if !print_type
-  then begin
+  then
+    begin
       List.iter
 	(fun (x,s) ->
 	 Format.fprintf Format.std_formatter "%s :: %a\n"
    			x Printer.print_schema (Schema.normal_form s.Schema.value)
 	) defsType
-	
     end
 
-(*
-  try (* TODO : error handling *)
-    let f = Parser.file Lexer.next_token lb in
-    close_in c;
-    if !parse_only then exit 0;
-    Interp.file f
-  with
-    | Lexer.Lexing_error s ->
-	report (lexeme_start_p lb, lexeme_end_p lb);
-	eprintf "lexical error: %s@." s;
-	exit 1
-    | Parser.Error ->
-	report (lexeme_start_p lb, lexeme_end_p lb);
-	eprintf "syntax error@.";
-	exit 1
-    | Interp.Error s ->
-	eprintf "error: %s@." s;
-	exit 1
-    | e ->
-	eprintf "Anomaly: %s\n@." (Printexc.to_string e);
-	exit 2
- *)
