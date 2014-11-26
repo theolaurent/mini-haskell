@@ -1,3 +1,4 @@
 true : use_menhir
 
 <**/*.ml> or <main.{{p.,}native,{d.,}byte}> : package(ocamlgraph)
+<typer/*.cmx>: for-pack(Typer)
