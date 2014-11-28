@@ -1,5 +1,4 @@
 type var = string
-type constructor = string
 	     
 type const =
   | CUnit
@@ -8,9 +7,8 @@ type const =
   | CChar of char
   | CPrim of string
 
-type ast = (* on le mettra en prvate ou pas ? *) (* je vois pas trop l'interet du private, mais on peut *)
+type ast =
   | Const of const
-  | Constructor of constructor
   | Var of var
   | Abstr of var * ast
   | App of ast * ast
