@@ -1,3 +1,13 @@
+# Compilation
+
+## Dépendance
+
+mini-haskell nécessite Ocaml (>= 4.02).
+Il dépend d' `ocamlgraph`.
+
+## Compilation
+
+La commande `make` compile mini-haskell.
 
 # Choix
 

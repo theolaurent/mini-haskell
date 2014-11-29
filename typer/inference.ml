@@ -45,7 +45,6 @@ module Make(Err:Errors.S) =
     (* type inference *) 
     let rec infer prim q env = function
       | Const c -> (q, infer_const prim c)
-      | Constructor c -> (q, ty (Ty.constructor c []))
       | Var x ->
 	 begin
 	   try
@@ -95,7 +94,7 @@ module Make(Err:Errors.S) =
 	       
     and infer_potentially_mutually_recursive_definitions prim q env l =      
       let rec add_edges_from g bound x = function
-	| Const _ | Constructor _ -> g
+	| Const _ -> g
 	| Var y ->
 	   if List.exists (fun (z, _) -> z = y) env || IdentSet.mem y bound
 	   then g

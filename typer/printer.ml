@@ -10,7 +10,6 @@ let print_const ff = function
 let rec print_ast ff = function
   | Ast.Const c -> print_const ff c
   | Ast.Var x -> Format.fprintf ff "%s" x
-  | Ast.Constructor str -> Format.fprintf ff "%s" str
   | Ast.Abstr (x, body) ->
      Format.fprintf ff "λ%s. %a" x print_ast body
   | Ast.App (x, y) ->

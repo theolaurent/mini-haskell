@@ -1,4 +1,4 @@
-command="./main.native"
+command="./petitghc"
 
 test_good() {
     for f in $@ ;
@@ -15,11 +15,11 @@ test_bad() {
 
 case $1 in
     syntax)
-	command="./main.native --parse-only" ;
+	command="${command} --parse-only" ;
 	test_good tests/syntax/good/*.hs tests/typing/*/*.hs tests/exec*/*.hs ;
 	test_bad tests/syntax/bad/*.hs ;;
     typing)
-	command="./main.native --type-only" ;
+	command="${command} --type-only" ;
 	test_good tests/typing/good/*.hs tests/exec*/*.hs ;
 	test_bad tests/typing/bad/*.hs ;;
 esac 
