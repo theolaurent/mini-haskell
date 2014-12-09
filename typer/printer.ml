@@ -7,26 +7,27 @@ let print_const ff = function
   | Ast.CPrim "empty" -> Format.fprintf ff "[]"
   | Ast.CPrim s -> Format.fprintf ff "%s" s
 
-let rec print_ast ff = function
+let rec print_ast ff ast = match ast.Ast.data with
+  | Ast.Spec _ -> failwith "TODO" (* <= URGENT *)
   | Ast.Const c -> print_const ff c
   | Ast.Var x -> Format.fprintf ff "%s" x
   | Ast.Abstr (x, body) ->
-     Format.fprintf ff "λ%s. %a" x print_ast body
+     Format.fprintf ff "λ%s. %a" x.Ast.data print_ast body
   | Ast.App (x, y) ->
      Format.fprintf ff "%a (%a)" print_ast x print_ast y
   | Ast.Let (l, e) ->
      begin
-       Format.open_hovbox 0 ;	 
+       Format.open_hovbox 0 ;
        Format.fprintf ff "let { %a} in@ %a" print_def_list l print_ast e ;
        Format.close_box ()
      end
   and print_def_list ff l =
     List.iter (fun (x,b) ->
 	       Format.open_hovbox 4 ;
-	       Format.fprintf ff "%s =@ %a;" x print_ast b ;
+	       Format.fprintf ff "%s =@ %a;" x.Ast.data print_ast b ;
 	       Format.close_box () ;
 	       Format.print_cut ()) l
-		    
+
 (* Printers for types *)
 let print_variable ff v =
   Format.fprintf ff "'%s" (Var.to_string v)
@@ -54,7 +55,7 @@ let print_bound ff = function
   | Schema.BRigid -> Format.fprintf ff "="
   | Schema.BFlexible -> Format.fprintf ff "≥"
 
-				       
+
 let rec print_schema ff sch =
   let Schema.S (l,term) = sch.Schema.value in
   Format.fprintf ff "(%a%a)"
