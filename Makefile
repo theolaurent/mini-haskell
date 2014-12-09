@@ -2,7 +2,7 @@ TARGETS=main
 BYTES=$(TARGETS:=.byte)
 NATIVE=$(TARGETS:=.native)
 
-OCAMLBUILD=ocamlbuild -use-ocamlfind -cflags '-w +A-4' 
+OCAMLBUILD=ocamlbuild -use-ocamlfind -cflags '-w +A-4'
 .PHONY:native byte clean
 
 all:native byte
@@ -14,5 +14,5 @@ byte:
 	$(OCAMLBUILD) $(BYTES)
 
 clean:
-	rm petitghc ; \
+	rm petitghc
 	$(OCAMLBUILD) -clean
