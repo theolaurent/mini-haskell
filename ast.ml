@@ -22,7 +22,7 @@ and 'a gen_ast_s =
 and 'a spec =
   | If of 'a gen_ast * 'a gen_ast * 'a gen_ast
   | Case of 'a gen_ast * 'a gen_ast * 'a annoted_var * 'a annoted_var * 'a gen_ast
-  | Do of 'a gen_ast list * 'a gen_ast
+  | Do of 'a gen_ast list
   | Return
 and 'a gen_def = 'a annoted_var * 'a gen_ast
 
