@@ -14,5 +14,5 @@ byte:
 	$(OCAMLBUILD) $(BYTES)
 
 clean:
-	rm petitghc
+	rm -f petitghc
 	$(OCAMLBUILD) -clean
