@@ -50,8 +50,8 @@ end
 %token <string> ID0
 %token ELSE IF IN LET CASE THEN RETURN DO OF
 %token LP RP LB RB LBK RBK
-%token COL SCOL COM
-%token BSLASH ARR EQ
+%token COL SCOL COM DCOL
+%token BSLASH ARR BARR EQ
 %token OR AND
 %token LT LEQ GT GEQ EQEQ NEQ
 %token PLUS MINUS MULT
@@ -87,21 +87,77 @@ main:
   
 
 def0:
-  | id = identifier0 l = list(identifier) EQ e = expr
+  | s = signature0 id = ID0 l = list(identifier) EQ e = expr
         {
-        map (fun e ->
+          let (id', sch) = s in
+          let ty =
+            if id = id'
+            then Some sch
+            else None
+          in          
+          map (fun e ->
+              let id = ann $startpos(id) $endpos(id) ?ty id in
               (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
             ) e
         }
-      
- def:
+  | id = identifier0 l = list(identifier) EQ e = expr
+        {
+          map (fun e ->
+              (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
+            ) e
+        }
+
+def:
+    | s = signature SCOL id = ID l = list(identifier) EQ e = expr
+        {
+          let (id', sch) = s in
+          let ty = if id = id' then Some sch else None in
+          map (fun e ->
+              let id = ann $startpos(id) $endpos(id) ?ty id in
+              (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
+            ) e
+            
+        }
   | id = identifier l = list(identifier) EQ e = expr
-      {
+    {
         map (fun e ->
             (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
           ) e
-      }
+    }
+
+signature0:
+    | id = ID0 DCOL s = schema
+        { (id, Schema_ast.convert s) }
+        
+signature:
+    | id = ID DCOL s = schema SCOL
+        { (id, Schema_ast.convert s) }
+
+
+schema:
+    | t = ty { Schema_ast.S ([], Schema_ast.Ty t) }
+    | l = separated_nonempty_list(COM, schema_binding) BARR t = ty
+            {
+              Schema_ast.S (l, Schema_ast.Ty t)
+            }
       
+schema_binding:
+      | id = ID { Schema_ast.generic_var id }                   
+      | id = ID b = schema_bound LP s = schema RP
+          { (id, b, s) }
+          
+schema_bound:
+ | GEQ { Schema_ast.Flexible }
+ | EQ { Schema_ast.Rigid }
+
+simple_ty:
+   | LP t = ty RP { t }
+   | i = ID { Schema_ast.Identifier (i, []) }
+
+ty:
+  | i = ID l = list(simple_ty) { Schema_ast.Identifier (i, l) }     
+  | t1 = ty ARR t2 = ty { Schema_ast.Arrow (t1, t2) }
+
 simple_expr:
   | LP e = expr RP { map Utils.id e }
   | LP error RP    { parsing_error "..." $startpos($2) $endpos($2) }
@@ -192,7 +248,7 @@ opt_separated_list(sep, X):
   
 identifier0:				
   | i = ID0 { annotate (pos $startpos(i) $endpos(i)) i }
-
+      
 
 identifier:				
   | i = ID { annotate (pos $startpos(i) $endpos(i)) i }
