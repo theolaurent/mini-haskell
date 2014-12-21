@@ -31,15 +31,15 @@ let pos s e = Pos (s, e)
 
 (* TODO : use this type everywhere we need a position e.g. the errors module *)
 
-type ast = (pos * [ `Unty | `Annot of unit ]) gen_ast
-type def = (pos * [ `Unty | `Annot of unit ]) gen_def
+type ast = (pos * [ `Unty | `Annot of Typer.Schema.schema ]) gen_ast
+type def = (pos * [ `Unty | `Annot of Typer.Schema.schema ]) gen_def
 type typed_ast = (pos * [ `Ty of unit ]) gen_ast
 type typed_def = (pos * [ `Ty of unit ]) gen_def
 
 let annotate pos ?ty ast =
  let t = match ty with
  | None -> `Unty
- | _ -> failwith "ICE: type annotation are not supported yet"
+ | Some t -> `Annot t
  in { annot = (pos, t) ; data = ast }
 
 module Primitive = Map.Make(String);;

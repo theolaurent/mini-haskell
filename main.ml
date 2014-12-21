@@ -88,7 +88,7 @@ let () =
       List.iter
 	(fun (x,s) ->
 	 Format.fprintf Format.std_formatter "%s :: %a\n"
-   			x Printer.print_schema (Schema.normal_form s.Schema.value)
+   			x Schema_printer.print_schema (Schema.normal_form s.Schema.value)
 	) defsType
     end
 

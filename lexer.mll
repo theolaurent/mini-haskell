@@ -91,10 +91,12 @@ rule token = parse
   | '}'                  { RB }
   | '['                  { LBK }
   | ']'                  { RBK }
+  | "::"                 { DCOL }
   | ':'                  { COL }
   | ';'                  { SCOL }
   | ','                  { COM }
   | '\\'                 { BSLASH }
+  | "=>"                 { BARR }
   | "->"                 { ARR }
   | eof                  { EOF }
   | _                    { lexing_error "Unknown character" lexbuf ; token lexbuf }

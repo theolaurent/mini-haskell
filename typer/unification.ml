@@ -169,7 +169,7 @@ let set_of_list l =
   List.fold_left (fun e var -> Var.Set.add var e) Var.Set.empty l
 
 let fail t1 t2 =
-  Format.fprintf (Format.str_formatter) "Failed to unify %a with %a" Printer.print_type t1 Printer.print_type t2 ;
+  Format.fprintf (Format.str_formatter) "Failed to unify %a with %a" Schema_printer.print_type t1 Schema_printer.print_type t2 ;
   raise (Failure [Format.flush_str_formatter ()])
 
 (* unification algorithm (monotypes) *)
