@@ -27,6 +27,8 @@ and 'a spec =
 and 'a gen_def = 'a annoted_var * 'a gen_ast
 
 type pos = Pos of Lexing.position * Lexing.position
+let pos s e = Pos (s, e)
+
 (* TODO : use this type everywhere we need a position e.g. the errors module *)
 
 type ast = (pos * [ `Unty | `Annot of unit ]) gen_ast
@@ -75,3 +77,16 @@ let ast_lambda pos l expr =
   List.fold_right (fun i res -> annotate pos (Abstr (i, res))) l expr
 
 let ast_app pos f l = List.fold_left (fun res expr -> annotate pos (App (res, expr))) f l
+
+
+let ast_if pos cond btrue bfalse =
+  annotate pos (Spec (If (cond, btrue, bfalse)))
+
+let ast_case pos list cempty hd tl cnempty =
+  annotate pos (Spec (Case (list, cempty, hd, tl, cnempty)))
+
+let ast_do pos instrs =
+  annotate pos (Spec (Do instrs))
+
+let ast_return pos =
+  annotate pos (Spec (Return))

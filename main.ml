@@ -72,7 +72,7 @@ let () =
   
   let module Inference = Inference.Make(TypeErr) in
   let module CheckMain = CheckMain(TypeErr) in
-  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs in
+  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs Lexing.dummy_pos Lexing.dummy_pos in
   CheckMain.check defsType ;
 
   if TypeErr.has_error_occured ()
