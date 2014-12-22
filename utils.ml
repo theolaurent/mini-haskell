@@ -35,6 +35,10 @@ module OptionM = struct
     List.fold_right (map2 (fun r acc -> r :: acc)) res (Some [])
 
   let mapn f l = sequence (List.map (map f) l)
+
+  let iter f v = match v with
+    | None -> ()
+    | Some x -> f x
 end
 
 

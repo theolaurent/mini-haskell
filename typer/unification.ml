@@ -1,7 +1,6 @@
 open Schema
 
 exception Failure of string list
-exception UpdateFailure
 
 
 
@@ -111,13 +110,14 @@ let abstraction_check = AbstrCheck.abstraction_check
 let update q (alpha, (bound, sigma)) =
   let ftv = free_variables sigma in
   let (q1, q2) = split q ftv in
+
   let rec find_alpha = function
     | [] -> assert false
     | (beta, (bound', sigma')) :: q2_a ->
        if beta = alpha
        then begin
 	   if bound' = BRigid && not (abstraction_check q sigma' sigma)
-	   then raise UpdateFailure
+	   then raise (Failure [])
 	   else (alpha, (bound, sigma)) :: (q2_a @ q1)
 	 end
        else (beta, (bound', sigma')) :: (find_alpha q2_a)
@@ -157,10 +157,10 @@ let merge q alpha alpha' =
 let is_useful alpha q sigma =
   let rec search = function
     | [] -> assert false
-    | (beta,_) :: q2 ->
+    | ((beta,_) as x) :: q2 ->
        if beta = alpha
-       then q2
-       else search q2
+       then []
+       else x :: search q2
   in
   let q2 = search q in
   is_free alpha (forall_map q2 sigma)
@@ -168,60 +168,66 @@ let is_useful alpha q sigma =
 let set_of_list l =
   List.fold_left (fun e var -> Var.Set.add var e) Var.Set.empty l
 
-let fail t1 t2 =
-  Format.fprintf (Format.str_formatter) "Failed to unify %a with %a" Schema_printer.print_type t1 Schema_printer.print_type t2 ;
-  raise (Failure [Format.flush_str_formatter ()])
+let fail t1 t2 msgs =
+  Format.fprintf (Format.str_formatter) "Failed to unify %a with %a"
+    Schema_printer.print_type t1
+    Schema_printer.print_type t2 ;
+  raise (Failure (Format.flush_str_formatter () :: msgs))
 
 (* unification algorithm (monotypes) *)
-let rec unify q t1 t2 = match (t1.Ty.value, t2.Ty.value) with
-  | (Ty.TVar a1, Ty.TVar a2) when a1 = a2 -> q
-  | (Ty.TConst (g1, l1), Ty.TConst (g2, l2))
-    when g1 = g2
-      && List.length l1 = List.length l2 ->
-    List.fold_left (fun res (t1, t2) -> unify res t1 t2) q (List.combine l1 l2)
-  | (Ty.TConst _, Ty.TConst _) ->  fail t1 t2 
-  | (Ty.TVar a1, Ty.TVar a2) ->
+let rec unify q t1 t2 =
+  try
+    match (t1.Ty.value, t2.Ty.value) with
+    | (Ty.TVar a1, Ty.TVar a2) when a1 = a2 -> q
+    | (Ty.TConst (g1, l1), Ty.TConst (g2, l2))
+      when g1 = g2
+        && List.length l1 = List.length l2 ->
+      List.fold_left (fun res (t1, t2) -> unify res t1 t2) q (List.combine l1 l2)
+    | (Ty.TConst _, Ty.TConst _) ->  raise (Failure [])
+    | (Ty.TVar a1, Ty.TVar a2) ->
       let (b1, s1) =
 	List.assoc a1 q
       in
       let n1 = normal_form s1.value in
-
-     let (b2, s2) = List.assoc a2 q in
-     let n2 = normal_form s2.value in
-     begin
-       match (n1.value, n2.value) with
-       | (S ([], STTy {Ty.value = Ty.TVar a1 ; _}), _) -> unify q t2 (Ty.variable a1)
-       | (_, S ([], STTy {Ty.value = Ty.TVar a2 ; _})) -> unify q t1 (Ty.variable a2)
-       | _ ->
+      
+      let (b2, s2) = List.assoc a2 q in
+      let n2 = normal_form s2.value in
+      begin
+        match (n1.value, n2.value) with
+        | (S ([], STTy {Ty.value = Ty.TVar a1 ; _}), _) -> unify q t2 (Ty.variable a1)
+        | (_, S ([], STTy {Ty.value = Ty.TVar a2 ; _})) -> unify q t1 (Ty.variable a2)
+        | _ ->
 	  begin
-	    if is_useful a1 q s2 || is_useful a2 q s1
-	    then fail t1 t2 ;
-	    let (q', s3) = polyunify q s1 s2 in
-	    let q' = update q' (a1, (b1, s3)) in
-	    let q' = update q' (a2, (b2, s3)) in
-	    merge q' a1 a2
-	  end
+     if is_useful a1 q s2 || is_useful a2 q s1
+     then raise (Failure []) ;
+     let (q', s3) = polyunify q s1 s2 in
+     let q' = update q' (a1, (b1, s3)) in
+     let q' = update q' (a2, (b2, s3)) in
+     merge q' a1 a2         
+   end
+      end
+      | (Ty.TVar a1, _) ->
+        let (_, s1) = List.assoc a1 q in
+        let n1 = normal_form s1.value in
+        
+        begin
+          match n1.value with
+          | S ([], STTy {Ty.value = Ty.TVar a1 ; _}) -> unify q t2 (Ty.variable a1)
+          | _ ->
+	    begin
+       if is_useful a1 q (ty t2)
+       then raise (Failure []) ;
+       let (q', _) = polyunify q s1 (ty t2) in
+       update q' (a1, (BRigid, ty t2))
      end
-  | (Ty.TVar a1, _) ->
-     let (_, s1) = List.assoc a1 q in
-     let n1 = normal_form s1.value in
-
-     begin
-       match n1.value with
-       | S ([], STTy {Ty.value = Ty.TVar a1 ; _}) -> unify q t2 (Ty.variable a1)
-       | _ ->
-	  begin
-	    if is_useful a1 q (ty t2)
-	    then fail t1 t2 ;
- 	    let (q', _) = polyunify q s1 (ty t2) in
-	    update q' (a1, (BRigid, ty t2))
-	  end
-     end
-  | (_, Ty.TVar _) -> unify q t2 t1
-  | (Ty.TArrow (t11, t12), Ty.TArrow (t21, t22)) ->
-     unify (unify q t11 t21) t12 t22
-  | _ -> fail t1 t2 
-
+        end
+      | (_, Ty.TVar _) -> unify q t2 t1
+      | (Ty.TArrow (t11, t12), Ty.TArrow (t21, t22)) ->
+        unify (unify q t11 t21) t12 t22
+      | _ -> raise (Failure [])
+  with Failure msgs ->
+    fail t1 t2 msgs
+    
 (* unification algorithm (polytypes) *)
 and polyunify q s1 s2 =
   let s1 = Schema.constructed_form s1.value in
