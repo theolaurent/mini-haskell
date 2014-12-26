@@ -44,10 +44,18 @@ let annotate pos ?ty ast =
 
 
  (* A gereric way to apply function to an annotated ast *)
-let gen_traversal (f_ast:'b gen_ast_s -> 'b) (ast:'a gen_ast) : 'b gen_ast =
-  let wrap_ast x = { data = x ; annot = f_ast x } in
-  let wrap_var x = { data = x ; annot = f_ast (Var x) } in (* quite an ugly hack *)
-  let rec loop_ast ast = match ast.data with
+let gen_traversal (f_ast:'a -> 'b gen_ast_s -> 'b) (ast:'a gen_ast) : 'b gen_ast =
+  let rec loop_ast ast =
+    let wrap_ast x = { data = x ; annot = f_ast ast.annot x } in
+    let wrap_var x = { data = x ; annot = f_ast ast.annot (Var x) } in (* quite an ugly hack *)
+    let do_spec s = match s with
+      | If (e1, e2, e3) -> If (loop_ast e1, loop_ast e2, loop_ast e3)
+      | Case (e, nilcase, { data = vh }, { data = vt }, conscase) ->
+         Case (loop_ast e, loop_ast nilcase, wrap_var vh, wrap_var vt, loop_ast conscase)
+      | Do le -> Do (List.map loop_ast le)
+      | Return -> Return
+    in
+    match ast.data with
     | (Const _ as x)
     | (Var _ as x) -> wrap_ast x
     | Abstr ({ data = v }, body) -> wrap_ast (Abstr (wrap_var v, loop_ast body))
@@ -55,20 +63,14 @@ let gen_traversal (f_ast:'b gen_ast_s -> 'b) (ast:'a gen_ast) : 'b gen_ast =
     | Let (binds, body) ->
        wrap_ast (Let (List.map (fun ({ data = v }, e) -> (wrap_var v, loop_ast e)) binds,
                       loop_ast body))
-    | Spec s -> wrap_ast (Spec (loop_spec s))
-  and loop_spec s = match s with
-    | If (e1, e2, e3) -> If (loop_ast e1, loop_ast e2, loop_ast e3)
-    | Case (e, nilcase, { data = vh }, { data = vt }, conscase) ->
-       Case (loop_ast e, loop_ast nilcase, wrap_var vh, wrap_var vt, loop_ast conscase)
-    | Do le -> Do (List.map loop_ast le)
-    | Return -> Return
+    | Spec s -> wrap_ast (Spec (do_spec s))
   in loop_ast ast
 
 
 module VarSet = Set.Make (struct type t = var let compare = Pervasives.compare end)
 
 let annot_free_vars ast =
-  let f ast = match ast with
+  let f _ ast = match ast with
     | Const c -> VarSet.empty
     | Var v -> VarSet.singleton v
     | Abstr ({ data = v }, body) -> VarSet.remove v body.annot
