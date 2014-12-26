@@ -101,6 +101,7 @@ let bltz x (z : label) = ins "bltz %s, %s" x z
 
 let jr a = ins "jr %s" a
 let jal (z : label) = ins "jal %s" z
+let j (z : label) = ins "j %s" z
 let jalr (z : register) = ins "jalr %s" z
 let la x (p : 'a address)  = ins "la %s, %a" x p
 let lb x (p : 'a address) = ins "lb %s, %a" x p

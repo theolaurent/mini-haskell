@@ -162,6 +162,9 @@ val bltz : register ->  label -> text
 val jr : register -> text
 (** [jr r] Continue l'exécution à l'adresse spécifiée dans le registre
     [r] *)
+val j : label -> text
+(** [j l] Continue l'exécution à l'adresse spécifiée par le label [l]
+*)
 val jal : label -> text
 (** [jal l] Continue l'exécution à l'adresse spécifiée par le label [l],
     sauve l'adresse de retour dans $ra.
