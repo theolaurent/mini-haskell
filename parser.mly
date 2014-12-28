@@ -23,7 +23,7 @@ let check_uniqueness name spos epos l =
   List.iter (fun (x, y) ->
       let n = name x in
       TypeErr.report ("type error: " ^ "identifier " ^ n ^ " is bound here...") (spos x) (epos x);
-      TypeErr.report ("type error; " ^ "... but is also bound there") (spos y) (epos y)
+      TypeErr.report ("type error: " ^ "... but is also bound there") (spos y) (epos y)
     ) (pred l)
 
 
@@ -55,6 +55,7 @@ end
 %token <int> INT
 %token <bool> BOOL
 %token <string> ID
+%token <string> LID				
 %token <string> ID0
 %token ELSE IF IN LET CASE THEN RETURN DO OF
 %token LP RP LB RB LBK RBK
@@ -67,7 +68,7 @@ end
 
 %nonassoc IN
 %nonassoc ELSE
-%nonassoc ARR
+%right ARR
 %left OR
 %left AND
 %left LT LEQ GT GEQ EQEQ NEQ
@@ -167,12 +168,17 @@ schema_bound:
 
 simple_ty:
 | LP t = ty RP { t }
-| i = ID { Schema_ast.Identifier (i, []) }
+| i = tid { Schema_ast.Identifier (i, []) }
 
 ty:
-| i = ID l = list(simple_ty) { Schema_ast.Identifier (i, l) }     
+| i = tid l = list(simple_ty) { Schema_ast.Identifier (i, l) }     
 | t1 = ty ARR t2 = ty { Schema_ast.Arrow (t1, t2) }
 
+tid:
+| i = ID { i }
+| i = LID { i }
+| LP RP { "()" }
+		      
 simple_expr:
 | LP e = expr RP { map Utils.id e }
 | LP error RP    { parsing_error "..." $startpos($2) $endpos($2) }

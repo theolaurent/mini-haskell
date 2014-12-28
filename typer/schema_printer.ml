@@ -38,3 +38,6 @@ and print_binding ff (v, (b, s)) =
 		print_schema s
 and print_bindings ff l =
   List.iter (Format.fprintf ff "%a, " print_binding) l
+
+let print_context ff l =
+  List.iter (Format.fprintf ff "%a ; " print_binding) l

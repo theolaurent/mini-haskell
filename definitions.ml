@@ -13,7 +13,7 @@ let tvar2 = Ty.variable var2
 let (@->) = Ty.arrow
 let (??) v = (v, Schema.(BFlexible, bot))
 let (!!) t = Ty.constructor t []
-let list t = Ty.constructor "list" [t]
+let list t = Ty.constructor "List" [t]
 let io t = Ty.constructor "IO" [t]
 
 let prim : Schema.schema Ast.Primitive.t =
@@ -22,25 +22,25 @@ let prim : Schema.schema Ast.Primitive.t =
       n (ty @@ !!t @-> !!t @-> !!r)
   in
   Ast.Primitive.empty
-  |> binop "plus"  "int"  "int"
-  |> binop "minus" "int"  "int"
-  |> binop "mult"  "int"  "int"
-  |> binop "lt"    "int"  "bool"
-  |> binop "gt"    "int"  "bool"
-  |> binop "leq"   "int"  "bool"
-  |> binop "geq"   "int"  "bool"
-  |> binop "eq"    "int"  "bool"
-  |> binop "neq"   "int"  "bool"
-  |> binop "and"   "bool" "bool"
-  |> binop "or"    "bool" "bool"
+  |> binop "plus"  "Integer"  "Integer"
+  |> binop "minus" "Integer"  "Integer"
+  |> binop "mult"  "Integer"  "Integer"
+  |> binop "lt"    "Integer"  "Bool"
+  |> binop "gt"    "Integer"  "Bool"
+  |> binop "leq"   "Integer"  "Bool"
+  |> binop "geq"   "Integer"  "Bool"
+  |> binop "eq"    "Integer"  "Bool"
+  |> binop "neq"   "Integer"  "Bool"
+  |> binop "and"   "Bool" "Bool"
+  |> binop "or"    "Bool" "Bool"
   |> Ast.Primitive.add "unary_minus"
-		       (ty @@ !!"int" @-> !!"int")
+		       (ty @@ !!"Integer" @-> !!"Integer")
   |> Ast.Primitive.add "empty"
 		       (forall ??var (ty @@ list tvar))
   |> Ast.Primitive.add "cons"
 		       (forall ??var (ty @@ tvar @-> list tvar @-> list tvar))
   |> Ast.Primitive.add "if"
-		       (forall ??var (ty @@ !!"bool" @-> tvar @-> tvar @-> tvar))
+		       (forall ??var (ty @@ !!"Bool" @-> tvar @-> tvar @-> tvar))
 
   (* do (do a b) c 'a -> ('b -> 'b) *)
   |> Ast.Primitive.add "do"
@@ -49,7 +49,7 @@ let prim : Schema.schema Ast.Primitive.t =
 			  (ty @@ io tvar @-> io tvar2 @-> io tvar2))
 			  
   |> Ast.Primitive.add "return ()"
-		       (ty @@ io !!"unit")
+		       (ty @@ io !!"()")
 		       
   |> Ast.Primitive.add "match"
 		       (forall_map
@@ -62,8 +62,8 @@ let prim : Schema.schema Ast.Primitive.t =
 
 let env =
   [
-    ("putChar", ty @@ !!"char" @-> io !!"unit") ;
-    ("rem", ty @@ !!"int" @-> !!"int" @-> !!"int") ;
-    ("div", ty @@ !!"int" @-> !!"int" @-> !!"int") ;
-    ("error", forall ??var (Schema.ty @@ list !!"char" @-> tvar))
+    ("putChar", ty @@ !!"Char" @-> io !!"()") ;
+    ("rem", ty @@ !!"Integer" @-> !!"Integer" @-> !!"Integer") ;
+    ("div", ty @@ !!"Integer" @-> !!"Integer" @-> !!"Integer") ;
+    ("error", forall ??var (Schema.ty @@ list !!"Char" @-> tvar))
   ]

@@ -21,17 +21,33 @@ let env = Definitions.env
 
 module CheckMain(Err:Errors.S) =
   struct
-    let check defs =
+    let check defs defsType =
       try
-	let sch = List.assoc "main" defs in
-	let alpha = Var.fresh () in
-	ignore (Unification.unify [(alpha, (Schema.BFlexible, sch))] (Ty.variable alpha) (Ty.constructor "IO" [Ty.constructor "unit" []]))
-      with
-      | Not_found -> Err.report "type error : main is not present" (Lexing.dummy_pos) (Lexing.dummy_pos)
-      | Unification.Failure trace ->
-	 Err.report "type error : While typing main..." (Lexing.dummy_pos) (Lexing.dummy_pos) ; 
-	 List.iter (fun msg -> Err.report ("type error : " ^ msg) (Lexing.dummy_pos) (Lexing.dummy_pos)) trace
+	let ({ Ast.annot = (Ast.Pos (spos, epos), _) ; _}, _) = List.find (fun (x,_) -> x.Ast.data = "main") defs in
+	try
+	  let sch = List.assoc "main" defsType in
+	  let alpha = Var.fresh () in
+	  ignore (Unification.unify [(alpha, (Schema.BFlexible, sch))] (Ty.variable alpha) (Ty.constructor "IO" [Ty.constructor "()" []]))
+	with Unification.Failure trace ->
+	  let msg = List.fold_left (fun s m -> s ^ "\n\t\t" ^ m) "type error : While typing main..." trace in
+	  Err.report msg spos epos ;
+      with Not_found -> Err.report "type error : main is not present" (Lexing.dummy_pos) (Lexing.dummy_pos)
   end
+
+module CheckPrimitiveName(Err:Errors.S) =
+  struct
+    let primitives = ["div"; "rem"; "putChar" ; "error"]
+    let check defs =
+      List.iter (fun (d, _) ->
+		 if List.mem d.Ast.data primitives
+		 then begin
+		     let (Ast.Pos (spos, epos), _) = d.Ast.annot in
+		     Format.fprintf Format.str_formatter
+				    "type error : %s is a primitive name" d.Ast.data ;
+		     Err.report (Format.flush_str_formatter ()) spos epos
+		   end) defs
+  end
+			 
 
     
 let file =
@@ -72,8 +88,10 @@ let () =
   
   let module Inference = Inference.Make(TypeErr) in
   let module CheckMain = CheckMain(TypeErr) in
+  let module CheckPrimitiveName = CheckPrimitiveName(TypeErr) in
   let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs Lexing.dummy_pos Lexing.dummy_pos in
-  CheckMain.check defsType ;
+  CheckMain.check defs defsType ;
+  CheckPrimitiveName.check defs ;
 
   if TypeErr.has_error_occured ()
   then

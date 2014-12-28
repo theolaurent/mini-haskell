@@ -51,6 +51,7 @@
 
 let digit = ['0'-'9']
 let ident = ['a'-'z'] ([ 'a'-'z'] | ['A'-'Z'] | '_' | '\'' | ['0'-'9' ])*
+let lident = ['A'-'Z'] ([ 'a'-'z'] | ['A'-'Z'] | '_' | '\'' | ['0'-'9' ])*
 let car = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t"
 
 	      (*
@@ -68,8 +69,11 @@ rule token = parse
 			     if pos.Lexing.pos_cnum - pos.Lexing.pos_bol = 0
 			     then ID0 str
 			     else ID str }
-  | "True"               { BOOL true }
-  | "False"              { BOOL false }
+  | lident as str        { if str = "True"
+			   then BOOL true
+			   else if str = "False"
+			   then BOOL false
+			   else LID str }
   | "--"                 { lcomment lexbuf }
   | '\''                 { char lexbuf } (* what about strings ? *)
   | '\"'                 { string [] lexbuf }

@@ -61,7 +61,7 @@ The goal is to check that leading abstractions have not been modified between sc
        let sigma' = forall_map (List.rev pref) (Schema.terminal t) in
        if not (is_free alpha sigma')
        then modify_polynom poly modif coefs a sigma'.value
-       else if normal_form sigma.value = ty (Ty.variable alpha)
+       else if normal_form sigma'.value = ty (Ty.variable alpha)
        then modify_polynom poly modif coefs a sigma.value
      else begin
 	 let poly = modify_polynom poly modif coefs a sigma'.value in
@@ -86,7 +86,7 @@ The goal is to check that leading abstractions have not been modified between sc
 	let nf2 = normal_form sigma2.value in
 	if is_monotype (ext_sub nf1).value
 	then true
-      else match (ext_sub nf2).value with
+	else match (ext_sub nf2).value with
 	   | S ([], STTy {Ty.value = Ty.TVar v ; _}) ->
 	      begin
 		try
@@ -117,7 +117,17 @@ let update q (alpha, (bound, sigma)) =
        if beta = alpha
        then begin
 	   if bound' = BRigid && not (abstraction_check q sigma' sigma)
-	   then raise (Failure [])
+	   then
+	     let msg =
+	       Format.fprintf Format.str_formatter
+			      "Cannot update %a in context [[ %a ]]\nAbstraction check failed between %a and %a"
+			      Schema_printer.print_binding (alpha, (bound, sigma))
+		 	      Schema_printer.print_context q 
+			      Schema_printer.print_schema sigma'
+			      Schema_printer.print_schema sigma ;
+	       Format.flush_str_formatter ()
+	     in
+	     raise (Failure [msg])
 	   else (alpha, (bound, sigma)) :: (q2_a @ q1)
 	 end
        else (beta, (bound', sigma')) :: (find_alpha q2_a)
@@ -168,10 +178,15 @@ let is_useful alpha q sigma =
 let set_of_list l =
   List.fold_left (fun e var -> Var.Set.add var e) Var.Set.empty l
 
-let fail t1 t2 msgs =
-  Format.fprintf (Format.str_formatter) "Failed to unify %a with %a"
+let fail t1 t2 q msgs =
+  let (ctx, _) =
+    let v = Var.Set.union (Ty.variables t1) (Ty.variables t2) in
+    split q v
+  in
+  Format.fprintf (Format.str_formatter) "Failed to unify %a with %a\n\t\t\t[[%a]]"
     Schema_printer.print_type t1
-    Schema_printer.print_type t2 ;
+    Schema_printer.print_type t2
+    Schema_printer.print_context ctx ;
   raise (Failure (Format.flush_str_formatter () :: msgs))
 
 (* unification algorithm (monotypes) *)
@@ -226,7 +241,7 @@ let rec unify q t1 t2 =
         unify (unify q t11 t21) t12 t22
       | _ -> raise (Failure [])
   with Failure msgs ->
-    fail t1 t2 msgs
+    fail t1 t2 q msgs
     
 (* unification algorithm (polytypes) *)
 and polyunify q s1 s2 =

@@ -50,7 +50,7 @@ let invalid_condition cond =
   Format.flush_str_formatter ()
 
 let invalid_branches b1 b2 =
-  Format.fprintf (Format.str_formatter) "While unifying branches:\n\t%a,\n\t%a..."
+  Format.fprintf (Format.str_formatter) "While unifying branches:\n\t\t\t%a,\n\t\t\t%a..."
     Printer.print_ast b1
     Printer.print_ast b2 ;
   Format.flush_str_formatter ()
@@ -61,10 +61,10 @@ let invalid_instruction instr =
   Format.flush_str_formatter ()
 
 let infer_const prim = function
-  | CUnit -> ty (Ty.constructor "unit" [])
-  | CChar _ -> ty (Ty.constructor "char" [])
-  | CInt _  -> ty (Ty.constructor "int" [])
-  | CBool _ -> ty (Ty.constructor "bool" [])
+  | CUnit -> ty (Ty.constructor "()" [])
+  | CChar _ -> ty (Ty.constructor "Char" [])
+  | CInt _  -> ty (Ty.constructor "Integer" [])
+  | CBool _ -> ty (Ty.constructor "Bool" [])
   | CPrim name -> Primitive.find name prim
 
 let universal_type q =
@@ -160,7 +160,8 @@ struct
     | `Annot s ->
       let alpha = Var.fresh () in
       let beta = Var.fresh () in
-      let q' = unify ((beta, (BFlexible, sch)) :: (alpha, (BRigid, s)) :: q) (Ty.variable alpha) (Ty.variable beta) in
+      let q' =
+	unify ((beta, (BFlexible, sch)) :: (alpha, (BRigid, s)) :: q) (Ty.variable alpha) (Ty.variable beta) in
       (q', s)
       (*      (ignore  polyunify q sch s ; (q, s)) *)
     
@@ -277,7 +278,7 @@ struct
             try
 	      unify ((alpha, (BFlexible, sigmaCond)) :: q1)
 	        (Ty.variable alpha)
-	        (Ty.constructor "bool" [])
+	        (Ty.constructor "Bool" [])
 	    with Unification.Failure trace ->
 	      error (invalid_condition cond :: trace) spos epos ;
 	      q
@@ -313,7 +314,7 @@ struct
 		     :: (listType, (BFlexible, bot))
 		     :: q1)
 	        (Ty.variable alpha)
-	        (Ty.constructor "list" [Ty.variable listType])
+	        (Ty.constructor "List" [Ty.variable listType])
 	    with Unification.Failure trace ->
 	      error (invalid_condition list :: trace) spos epos ;
 	      (listType, (BFlexible, bot)) :: q
@@ -323,7 +324,7 @@ struct
 	  let (q4, sigma2) =
 	    let env =
 	      (hd.data, ty (Ty.variable listType))
-	      :: (tl.data, ty (Ty.constructor "list" [Ty.variable listType]))
+	      :: (tl.data, ty (Ty.constructor "List" [Ty.variable listType]))
 	      :: env
 	    in
 	    infer prim q3 env bnempty
@@ -355,14 +356,14 @@ struct
 	      try
 	        unify ((v, (BFlexible, sigma)) :: q2)
 		  (Ty.variable v)
-		  (Ty.constructor "IO" [Ty.constructor "unit" []])
+		  (Ty.constructor "IO" [Ty.constructor "()" []])
 	      with Unification.Failure trace ->
 	        let (Pos (spos, epos), _) = expr.annot in
 	        error (invalid_instruction expr :: trace) spos epos ;
 	        q2
 	  ) q instrs
         in
-        (q1, ty (Ty.constructor "IO" [Ty.constructor "unit" []]))
+        (q1, ty (Ty.constructor "IO" [Ty.constructor "()" []]))
       | Return ->
-        (q, ty (Ty.constructor "IO" [Ty.constructor "unit" []]))
+        (q, ty (Ty.constructor "IO" [Ty.constructor "()" []]))
 end
