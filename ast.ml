@@ -50,7 +50,7 @@ let gen_traversal (f_ast:'a -> 'b gen_ast_s -> 'b) (ast:'a gen_ast) : 'b gen_ast
     let wrap_var x = { data = x ; annot = f_ast ast.annot (Var x) } in (* quite an ugly hack *)
     let do_spec s = match s with
       | If (e1, e2, e3) -> If (loop_ast e1, loop_ast e2, loop_ast e3)
-      | Case (e, nilcase, { data = vh }, { data = vt }, conscase) ->
+      | Case (e, nilcase, { data = vh ; _ }, { data = vt ; _ }, conscase) ->
          Case (loop_ast e, loop_ast nilcase, wrap_var vh, wrap_var vt, loop_ast conscase)
       | Do le -> Do (List.map loop_ast le)
       | Return -> Return
@@ -58,10 +58,10 @@ let gen_traversal (f_ast:'a -> 'b gen_ast_s -> 'b) (ast:'a gen_ast) : 'b gen_ast
     match ast.data with
     | (Const _ as x)
     | (Var _ as x) -> wrap_ast x
-    | Abstr ({ data = v }, body) -> wrap_ast (Abstr (wrap_var v, loop_ast body))
+    | Abstr ({ data = v ; _ }, body) -> wrap_ast (Abstr (wrap_var v, loop_ast body))
     | App (f, e) -> wrap_ast (App (loop_ast f, loop_ast e))
     | Let (binds, body) ->
-       wrap_ast (Let (List.map (fun ({ data = v }, e) -> (wrap_var v, loop_ast e)) binds,
+       wrap_ast (Let (List.map (fun ({ data = v ; _ }, e) -> (wrap_var v, loop_ast e)) binds,
                       loop_ast body))
     | Spec s -> wrap_ast (Spec (do_spec s))
   in loop_ast ast
@@ -71,9 +71,9 @@ module VarSet = Set.Make (struct type t = var let compare = Pervasives.compare e
 
 let annot_free_vars ast =
   let f _ ast = match ast with
-    | Const c -> VarSet.empty
+    | Const _ -> VarSet.empty
     | Var v -> VarSet.singleton v
-    | Abstr ({ data = v }, body) -> VarSet.remove v body.annot
+    | Abstr ({ data = v ; _ }, body) -> VarSet.remove v body.annot
     | App (f, e) -> VarSet.union f.annot e.annot
     | Let (binds, body) -> (* Definitions are recursive by default *)
        let allfvars = List.fold_left (fun res (_, e) -> VarSet.union res e.annot) body.annot binds in

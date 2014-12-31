@@ -1,5 +1,5 @@
 open Ast
-
+       
 (* Warning : no more stack in he ir, was useless ! *)
 
 (* invariant : the value returned by an expression of mini-haskell will always be in v0 *)
@@ -23,9 +23,14 @@ type ir =
   | Value of value
   | Branch of label
   | BranchFalse of label
-  | CallFun (* no need of number arg, always one ; TODO : wich register for what ? *)
+  | CallFun
+  (* no need of number arg, always one ; 
+     TODO : wich register for what ? 
+      * We need to push the argument on the stack (because evaluating the closure is an arbirtrary operation, so it may requires to call other functions and there is no way to only use registers). I think it should push v0 on the top of the stack.
+      * The closure is the last thing evaluated before the call, so it should be in v0. Call fun will move it to a1.
+  *)
   | ReturnCall
-  | ReturnForce
+  | ReturnForce (* Not needed *)
   (* lexical bindings *)
   | Fetch of int
   | Store of int (* will be usefull for recursive definitions *)
@@ -83,8 +88,11 @@ let rec expr_to_ir env (ast:free_vars_ast) = match ast.data with
                        @ [ Label lcont ]
                     | Case _ -> failwith "TODO"
                     (* why not just expand case into if ? *)
+		    (* No, it has to load variables *)
                     | Do _ -> failwith "TODO"
                     | Return -> failwith "TODO"
+		    (* I think it should just load unit in v0 : 
+                       something like Value (Imm 0) *)
               end
 and froze env e =
   let new_env = e.annot in
