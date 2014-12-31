@@ -1,11 +1,12 @@
 open Ast
 
+(* Warning : no more stack in he ir, was useless ! *)
+
+(* invariant : the value returned by an expression of mini-haskell will always be in v0 *)
+
 (* TODO : a nice interface, cf mips.ml *)
 
-
-(* Inspired from UPMC'LI223 ; is it a good intermediate rep ?? *)
-(* closures => not chained env ; closure = code + env *)
-(* TODO : handle recursive definitions *)
+(* TODO : handle recursive definitions ([t]: i will do it) *)
 type label = L of int
 type env = value list
 and value =
@@ -17,14 +18,12 @@ and value =
   (* will use a register to handle current environement *)
   | Froz of label * int list
 type ir =
-  | Force (* force the top of the stack without consuming it *)
+  | Force (* force the current value i.e. the content of v0 *)
   | Label of label
-  | Push of value
+  | Value of value
   | Branch of label
-  | BranchFalse of label (* consum the top of the stack *)
-  | CallFun (* no need of number arg, always one, so 2 element are removed from the stack *)
-            (* the function is at the top of the stack, the argument just following *)
-            (* TODO : (later) optimise with registers *)
+  | BranchFalse of label
+  | CallFun (* no need of number arg, always one ; TODO : wich register for what ? *)
   | ReturnCall
   | ReturnForce
   (* lexical bindings *)
@@ -53,10 +52,10 @@ let calc_free_vars_ast (ast:typed_ast) : free_vars_ast =
 
 let rec expr_to_ir env (ast:free_vars_ast) = match ast.data with
   | Const c -> begin match c with
-                     | CUnit -> [ Push (Imm 0) ]
-                     | CBool b -> [ Push (Imm (if b then 1 else 0)) ]
-                     | CInt i -> [ Push (Imm i) ]
-                     | CChar c -> [ Push (Imm (int_of_char c)) ]
+                     | CUnit -> [ Value (Imm 0) ]
+                     | CBool b -> [ Value (Imm (if b then 1 else 0)) ]
+                     | CInt i -> [ Value (Imm i) ]
+                     | CChar c -> [ Value (Imm (int_of_char c)) ]
                      | CPrim p -> failwith "TODO" (* be carefull with partial applications *)
                                                   (* do not forget to force *)
                end
@@ -65,10 +64,10 @@ let rec expr_to_ir env (ast:free_vars_ast) = match ast.data with
      let new_env = v :: ast.annot in (* formal parameter must be at at first place *)
      let lfunc = next_label () in
      let lcont = next_label () in
-     let clos_env = List.map (index env) new_env in
+     let clos_env = List.map (index env) new_env in (* TODO : fix the problem of the formal parameter, wich is not in env... *)
      [ Branch lcont ; Label lfunc ]
      @ (expr_to_ir new_env body)
-     @ [ ReturnCall ; Label lcont ; Push (Clos (lfunc, clos_env)) ]
+     @ [ ReturnCall ; Label lcont ; Value (Clos (lfunc, clos_env)) ]
   | App (f, e) ->
      (froze env e) @ (expr_to_ir env f) @ [ CallFun ] (* TODO : and call prim ?? *)
   | Let _ -> failwith "TODO" (* do not forget to froze *)
@@ -94,4 +93,4 @@ and froze env e =
   let froz_env = List.map (index env) new_env in (* get the indices of all free variables to build the env of the closure *)
   [ Branch lcont ; Label lfroz ]
   @ (expr_to_ir new_env e) (* no need of a "return" ?? to see with the force function *)
-  @ [ ReturnForce ; Label lcont ; Push (Froz (lfroz, froz_env)) ]
+  @ [ ReturnForce ; Label lcont ; Value (Froz (lfroz, froz_env)) ]
