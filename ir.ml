@@ -26,6 +26,7 @@ type ir =
             (* the function is at the top of the stack, the argument just following *)
             (* TODO : (later) optimise with registers *)
   | ReturnCall
+  | ReturnForce
   (* lexical bindings *)
   | Fetch of int
   | Store of int (* will be usefull for recursive definitions *)
@@ -91,6 +92,6 @@ and froze env e =
   let lfroz = next_label () in
   let lcont = next_label () in
   let froz_env = List.map (index env) new_env in (* get the indices of all free variables to build the env of the closure *)
-  [ Branch lcont ; Label lfunc ]
-  @ (expr_to_ir new_env body) (* no need of a "return" ?? to see with the force function *)
-  @ [ Label lcont ; Push (Clos (lfunc, clos_env)) ]
+  [ Branch lcont ; Label lfroz ]
+  @ (expr_to_ir new_env e) (* no need of a "return" ?? to see with the force function *)
+  @ [ ReturnForce ; Label lcont ; Push (Froz (lfroz, froz_env)) ]
