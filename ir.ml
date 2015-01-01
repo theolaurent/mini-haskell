@@ -1,4 +1,5 @@
 open Ast
+
        
 (* Warning : no more stack in he ir, was useless ! *)
 
@@ -7,32 +8,37 @@ open Ast
 (* TODO : a nice interface, cf mips.ml *)
 
 (* TODO : handle recursive definitions ([t]: i will do it) *)
+type variable =
+  | GlobalVar of string (* on data segment *)
+  | LocalVar of int     (* on stack, index starting at fp *)
+  | ClosureVar of int   (* on closure, index from $a1 *)
+  | ArgVar              (* argument, in $a0 *)
+
+
+module VarMap = Map.Make (struct type t = var let compare = compare end)
+      
+    
 type label = L of int
 type env = value list
 and value =
   | Imm of int
   | Cons of value * value
-  | Clos of label * int list
+  | Clos of label * variable list
   (* int list is index of free vars of the body, the formal parameter being in front of the list,
      usefull to build the closure *)
   (* will use a register to handle current environement *)
-  | Froz of label * int list
+  | Froz of label * variable list
 type ir =
   | Force (* force the current value i.e. the content of v0 *)
   | Label of label
   | Value of value
   | Branch of label
   | BranchFalse of label
-  | CallFun
-  (* no need of number arg, always one ; 
-     TODO : wich register for what ? 
-      * We need to push the argument on the stack (because evaluating the closure is an arbirtrary operation, so it may requires to call other functions and there is no way to only use registers). I think it should push v0 on the top of the stack.
-      * The closure is the last thing evaluated before the call, so it should be in v0. Call fun will move it to a1.
-  *)
+  | CallFun (* no need of number arg, always one ; TODO : wich register for what ? *)
   | ReturnCall
-  | ReturnForce (* Not needed *)
+  | ReturnForce
   (* lexical bindings *)
-  | Fetch of int
+  | Fetch of variable
   | Store of int (* will be usefull for recursive definitions *)
 
 
@@ -54,8 +60,8 @@ let calc_free_vars_ast (ast:typed_ast) : free_vars_ast =
   let f set _ = VarSet.fold (fun x res -> x :: res) set []
   in gen_traversal f (annot_free_vars ast)
 
-
-let rec expr_to_ir env (ast:free_vars_ast) = match ast.data with
+   
+let rec expr_to_ir (env : variable VarMap.t) (ast:free_vars_ast) = match ast.data with
   | Const c -> begin match c with
                      | CUnit -> [ Value (Imm 0) ]
                      | CBool b -> [ Value (Imm (if b then 1 else 0)) ]
@@ -64,12 +70,17 @@ let rec expr_to_ir env (ast:free_vars_ast) = match ast.data with
                      | CPrim p -> failwith "TODO" (* be carefull with partial applications *)
                                                   (* do not forget to force *)
                end
-  | Var v -> [ Fetch (index env v) ] (* the evaluation is not forced *)
-  | Abstr ({ data = v}, body) ->
-     let new_env = v :: ast.annot in (* formal parameter must be at at first place *)
+  | Var v -> [ Fetch (VarMap.find v env) ] (* the evaluation is not forced *)
+  | Abstr ({ data = v ; _ }, body) ->
+     let new_env =
+       List.fold_left (fun (e, i) s -> (VarMap.add s (ClosureVar i) e, succ i)) (VarMap.empty, 0) ast.annot
+       |> fst
+       |> VarMap.add v ArgVar
+     in
+     (* formal parameter must be at at first place *)
      let lfunc = next_label () in
      let lcont = next_label () in
-     let clos_env = List.map (index env) new_env in (* TODO : fix the problem of the formal parameter, wich is not in env... *)
+     let clos_env = List.map (fun s -> VarMap.find s env) ast.annot in (* TODO : fix the problem of the formal parameter, wich is not in env... *)
      [ Branch lcont ; Label lfunc ]
      @ (expr_to_ir new_env body)
      @ [ ReturnCall ; Label lcont ; Value (Clos (lfunc, clos_env)) ]
@@ -88,17 +99,17 @@ let rec expr_to_ir env (ast:free_vars_ast) = match ast.data with
                        @ [ Label lcont ]
                     | Case _ -> failwith "TODO"
                     (* why not just expand case into if ? *)
-		    (* No, it has to load variables *)
                     | Do _ -> failwith "TODO"
                     | Return -> failwith "TODO"
-		    (* I think it should just load unit in v0 : 
-                       something like Value (Imm 0) *)
               end
 and froze env e =
-  let new_env = e.annot in
+  let new_env =
+    List.fold_left (fun (e, i) s -> (VarMap.add s (ClosureVar i) e, succ i)) (VarMap.empty, 0) e.annot
+    |> fst
+  in
   let lfroz = next_label () in
   let lcont = next_label () in
-  let froz_env = List.map (index env) new_env in (* get the indices of all free variables to build the env of the closure *)
+  let froz_env = List.map (fun s -> VarMap.find s env) e.annot in (* get the indices of all free variables to build the env of the closure *)
   [ Branch lcont ; Label lfroz ]
   @ (expr_to_ir new_env e) (* no need of a "return" ?? to see with the force function *)
   @ [ ReturnForce ; Label lcont ; Value (Froz (lfroz, froz_env)) ]

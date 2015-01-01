@@ -21,6 +21,8 @@ module Tag =
 
 (* boolean false is 0 *)
 
+(* a0 and a1 should always be restored (they contains the current argument and closure respectively *)
+    
 (* current environement is pointed by register ... *)
 
 let compile_label (L l) = ("L" ^ string_of_int l)
@@ -28,92 +30,99 @@ let compile_label (L l) = ("L" ^ string_of_int l)
 (* force applies forcing algorithm on value pointed by v0 *)			    
 let force =
   label "force"
-  ++ lw a0 areg (0, v0)
-  ++ li a1 Tag.frozen    ++ comment "frozen tag"
-  ++ bge a0 a1 "force_frz"
+  ++ lw t0 areg (0, v0)
+  ++ li t1 Tag.frozen    ++ comment "frozen tag"
+  ++ bge t0 t1 "force_frz"
   ++ jr ra
   ++ label "force_frz"
-  ++ beq a0 a1 "force_frozen"
+  ++ beq t0 t1 "force_frozen"
   ++ lw v0 areg (4, v0)
   ++ jr ra
   ++ label "force_frozen"
   ++ push ra
   ++ push v0
-  ++ lw a1 areg (4, v0) ++ comment "load the closure"
-  ++ lw t0 areg (4, a1) ++ comment "load the code ptr"
+  ++ lw t1 areg (4, v0) ++ comment "load the closure"
+  ++ lw t0 areg (4, t1) ++ comment "load the code ptr"
   ++ jalr t0            ++ comment "evaluate function"
   ++ jal "force"        ++ comment "recursively apply force on the result"
   ++ comment "At this point, the result of this force is in v0"
-  ++ pop a0             ++ comment "restore forced value in a0"
-  ++ li a1 Tag.unfrozen ++ comment "unfrozen tag"
-  ++ sw a1 areg (0, a0) ++ comment "update tag"
-  ++ sw v0 areg (4, a0) ++ comment "update the value"
+  ++ pop t0             ++ comment "restore forced value in t0"
+  ++ li t1 Tag.unfrozen ++ comment "unfrozen tag"
+  ++ sw t1 areg (0, t0) ++ comment "update tag"
+  ++ sw v0 areg (4, t0) ++ comment "update the value"
   ++ pop ra
   ++ jr ra
 	 		    
 (* Store the env in memory [ *r + delta ; *r + delta + 4 * (length env - 1)] 
    r must be different from a1, sp, ra
    I've assumed the environment starts at sp but I'm probably wrong...  
- *)			    
+ *)
+let read_variable dest var =
+  match var with
+  | GlobalVar s -> lw dest alab s
+  | LocalVar i -> lw dest areg (- 4 * (i + 1), fp) (* note : first element of the frame is ra, local variables start at $fp - 4 *)
+  | ClosureVar i -> lw dest areg (4 * (i + 2), a1) (* note : closure variable starts at $a1 + 8 *)
+  | ArgVar -> move dest a0
+	
 let write_env env (delta, r) =
   List.fold_left
-    (fun (code, delta) i ->
+    (fun (code, delta) var ->
      let code =
        code 
-       ++ add a1 sp oi (-4 * i)
-       ++ sw a1 areg (delta, r)
+       ++ read_variable t0 var
+       ++ sw t0 areg (delta, r)
      in (code, delta + 4)
     ) (nop, delta) env
   |> fst  
 (* create the value v on the heap and put its address in v0 *)
 (* be sareful it modifies a0 and a lot of others *)
+
+let allocate size =
+  push a0
+  ++ li a0 size
+  ++ li v0 9
+  ++ syscall
+  ++ pop a0
+
 let rec compile_value v = match v with
   | Imm i ->
-     li a0 8            ++ comment "enough space for a tag + an integer"
-  ++ li v0 9            ++ comment "syscall 9 (sbrk)"
-  ++ syscall
+     allocate 8         ++ comment "enough space for a tag + an integer"
   ++ comment "address of the allocated space is now in $v0"
-  ++ li a1 Tag.int      ++ comment "0 is the tag for integers"
-  ++ sw a1 areg (0, v0) ++ comment "store the tag"
-  ++ li a2 i
-  ++ sw a2 areg (4, v0) ++ comment "store the immediate value"
+  ++ li t0 Tag.int      ++ comment "0 is the tag for integers"
+  ++ sw t0 areg (0, v0) ++ comment "store the tag"
+  ++ li t0 i
+  ++ sw t0 areg (4, v0) ++ comment "store the immediate value"
   | Cons (v1, v2) ->
-     li a0 12              ++ comment "space for tag + hd + tl"
-     ++ li v0 9            ++ comment "sbrk"
-     ++ syscall
-     ++ li a1 Tag.cons     ++ comment "tag for cons"
-     ++ sw a1 areg (0, v0) ++ comment "store the tag"
+     allocate 12           ++ comment "space for tag + hd + tl"
+     ++ li t0 Tag.cons     ++ comment "tag for cons"
+     ++ sw t0 areg (0, v0) ++ comment "store the tag"
      ++ push v0            ++ comment "save addresse of allocated space"
      ++ comment "allocate head"
      ++ compile_value v1
-     ++ peek a0
-     ++ sw v0 areg (4, a0) ++ comment "store the head"
+     ++ peek t0
+     ++ sw v0 areg (4, t0) ++ comment "store the head"
      ++ comment "allocate tail"
      ++ compile_value v2  
-     ++ pop a0
-     ++ sw v0 areg (8, a0) ++ comment "store the tail"
-     ++ move v0 a0
+     ++ pop t0
+     ++ sw v0 areg (8, t0) ++ comment "store the tail"
+     ++ move v0 t0
   | Clos (l, env) ->
      let env_lgth = List.length env in
-     li a0 ((env_lgth + 2) * 4)      ++ comment "space for tag + code ptr + env"
-     ++ li v0 9                      ++ comment "sbrk"
-     ++ syscall
-     ++ li a1 Tag.closure            ++ comment "tag for closure"
-     ++ sw a1 areg (0, v0)           ++ comment "store tag"
-     ++ lw a1 alab (compile_label l) ++ comment "code ptr"
-     ++ sw a1 areg (4, v0)           ++ comment "store code ptr"
+     allocate ((env_lgth + 2) * 4)   ++ comment "space for tag + code ptr + env"
+     ++ li t0 Tag.closure            ++ comment "tag for closure"
+     ++ sw t0 areg (0, v0)           ++ comment "store tag"
+     ++ lw t0 alab (compile_label l) ++ comment "code ptr"
+     ++ sw t0 areg (4, v0)           ++ comment "store code ptr"
      ++ write_env env (8, v0)
   | Froz (l, env) ->
-     li a0 8                          ++ comment "space for tag + closure"
-     ++ li v0 9
-     ++ syscall
-     ++ li a1 Tag.frozen              ++ comment "tag for frozen blocks"
-     ++ sw a1 areg (0, v0)            ++ comment "store the tag"
+     allocate 8                       ++ comment "space for tag + closure"
+     ++ li t0 Tag.frozen              ++ comment "tag for frozen blocks"
+     ++ sw t0 areg (0, v0)            ++ comment "store the tag"
      ++ push v0
      ++ compile_value (Clos (l, env))
-     ++ move a1 v0
+     ++ move t0 v0
      ++ pop v0
-     ++ lw a1 areg (4, v0)             ++ comment "store the closure"
+     ++ lw t0 areg (4, v0)             ++ comment "store the closure"
 	   
 
 let compile_instr ir = match ir with
@@ -128,20 +137,28 @@ let compile_instr ir = match ir with
   | BranchFalse l ->
      lw v0 areg (4, v0) 
      ++ beqz v0 (compile_label l)
-  | CallFun -> failwith "TODO"
-   (* Potentially :
-     move a1 v0
+  | CallFun -> 
+     move t0 a0
+     ++ move t1 a1
+     ++ move a1 v0
      ++ pop a0
-     ++ lw t0 (4, a1)
-     ++ push sp
+     ++ push t0
+     ++ push t1
+     ++ lw t0 areg (4, a1)
+     ++ push fp
      ++ push ra
      ++ jalr t0
      ++ pop ra
-     ++ pop sp
-   And the result is in v0 
-   TODO : How do we load the environment ? *) 
+     ++ pop fp
+     ++ pop a1
+     ++ pop a0
+	    (*   And the result is in v0  *)
+   (* TODO : How do we load the environment ? *) 
   | ReturnCall -> jr ra
   | ReturnForce -> failwith "TODO" (* Not needed *)
   (* To implement once we decided environment representation *)
   | Fetch i -> failwith "TODO"
   | Store i -> failwith "TODO"
+
+			(* fp | ra | arg | closure | loc1 | ... | locn *)
+		
