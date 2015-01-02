@@ -22,12 +22,12 @@ module Tag =
 (* boolean false is 0 *)
 
 (* a0 and a1 should always be restored (they contains the current argument and closure respectively *)
-    
+
 (* current environement is pointed by register ... *)
 
 let compile_label (L l) = ("L" ^ string_of_int l)
 
-(* force applies forcing algorithm on value pointed by v0 *)			    
+(* force applies forcing algorithm on value pointed by v0 *)
 let force =
   label "force"
   ++ lw t0 areg (0, v0)
@@ -52,10 +52,10 @@ let force =
   ++ sw v0 areg (4, t0) ++ comment "update the value"
   ++ pop ra
   ++ jr ra
-	 		    
-(* Store the env in memory [ *r + delta ; *r + delta + 4 * (length env - 1)] 
+
+(* Store the env in memory [ *r + delta ; *r + delta + 4 * (length env - 1)]
    r must be different from a1, sp, ra
-   I've assumed the environment starts at sp but I'm probably wrong...  
+   I've assumed the environment starts at sp but I'm probably wrong...
  *)
 let read_variable dest var =
   match var with
@@ -63,17 +63,17 @@ let read_variable dest var =
   | LocalVar i -> lw dest areg (- 4 * (i + 1), fp) (* note : first element of the frame is ra, local variables start at $fp - 4 *)
   | ClosureVar i -> lw dest areg (4 * (i + 2), a1) (* note : closure variable starts at $a1 + 8 *)
   | ArgVar -> move dest a0
-	
+
 let write_env env (delta, r) =
   List.fold_left
     (fun (code, delta) var ->
      let code =
-       code 
+       code
        ++ read_variable t0 var
        ++ sw t0 areg (delta, r)
      in (code, delta + 4)
     ) (nop, delta) env
-  |> fst  
+  |> fst
 (* create the value v on the heap and put its address in v0 *)
 (* be sareful it modifies a0 and a lot of others *)
 
@@ -102,7 +102,7 @@ let rec compile_value v = match v with
      ++ peek t0
      ++ sw v0 areg (4, t0) ++ comment "store the head"
      ++ comment "allocate tail"
-     ++ compile_value v2  
+     ++ compile_value v2
      ++ pop t0
      ++ sw v0 areg (8, t0) ++ comment "store the tail"
      ++ move v0 t0
@@ -123,10 +123,10 @@ let rec compile_value v = match v with
      ++ move t0 v0
      ++ pop v0
      ++ lw t0 areg (4, v0)             ++ comment "store the closure"
-	   
+
 
 let compile_instr ir = match ir with
-  | Force ->     
+  | Force ->
      jal "force"
   | Label l ->
      label (compile_label l)
@@ -135,9 +135,9 @@ let compile_instr ir = match ir with
   | Branch l ->
      b (compile_label l)
   | BranchFalse l ->
-     lw v0 areg (4, v0) 
+     lw v0 areg (4, v0)
      ++ beqz v0 (compile_label l)
-  | CallFun -> 
+  | CallFun ->
      move t0 a0
      ++ move t1 a1
      ++ move a1 v0
@@ -153,12 +153,11 @@ let compile_instr ir = match ir with
      ++ pop a1
      ++ pop a0
 	    (*   And the result is in v0  *)
-   (* TODO : How do we load the environment ? *) 
+   (* TODO : How do we load the environment ? *)
   | ReturnCall -> jr ra
-  | ReturnForce -> failwith "TODO" (* Not needed *)
+  | ReturnForce -> nop (* No need to do anything *)
   (* To implement once we decided environment representation *)
   | Fetch i -> failwith "TODO"
   | Store i -> failwith "TODO"
 
 			(* fp | ra | arg | closure | loc1 | ... | locn *)
-		
