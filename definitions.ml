@@ -33,32 +33,11 @@ let prim : Schema.schema Ast.Primitive.t =
   |> binop "neq"   "int"  "bool"
   |> binop "and"   "bool" "bool"
   |> binop "or"    "bool" "bool"
-  |> Ast.Primitive.add "unary_minus"
-		       (ty @@ !!"int" @-> !!"int")
   |> Ast.Primitive.add "empty"
 		       (forall ??var (ty @@ list tvar))
   |> Ast.Primitive.add "cons"
 		       (forall ??var (ty @@ tvar @-> list tvar @-> list tvar))
-  |> Ast.Primitive.add "if"
-		       (forall ??var (ty @@ !!"bool" @-> tvar @-> tvar @-> tvar))
 
-  (* do (do a b) c 'a -> ('b -> 'b) *)
-  |> Ast.Primitive.add "do"
-		       (forall_map
-			  [??var ; ??var2]
-			  (ty @@ io tvar @-> io tvar2 @-> io tvar2))
-			  
-  |> Ast.Primitive.add "return ()"
-		       (ty @@ io !!"unit")
-		       
-  |> Ast.Primitive.add "match"
-		       (forall_map
-			  [??var ; ??var2]
-			  (ty @@
-			     list tvar
-			     @-> tvar2
-			     @-> (tvar @-> list tvar @-> tvar2)
-			     @-> tvar2))
 
 let env =
   [
