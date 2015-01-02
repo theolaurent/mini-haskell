@@ -45,6 +45,7 @@ type ir =
   | UnPrim of string
   | BinPrim of string
   | ApplyCons
+  | ApplyUncons (* push hd ; push tl *)
 		 
 type free_vars_ast = var list gen_ast
 
@@ -167,9 +168,20 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
                        @ [ Branch lcont ; Label lfalse ]
                        @ (expr_to_ir env locals onfalse)
                        @ [ Label lcont ]
-                    | Case _ -> failwith "TODO"
-                    (* why not just expand case into if + lambda ? *)
-                    | Do l  ->
+                    | Case (l, bempty, hd, tl, bnempty) -> 
+		       let lempty = next_label () in
+		       let lcont = next_label () in
+		       (expr_to_ir env locals l)
+		       @ [ Force ; BranchFalse lempty ] (* note: false and empty have the same representation *)
+		       @ [ ApplyUncons ]
+		       @ ( let env = env
+				     |> VarMap.add hd.data (LocalVar locals)
+				     |> VarMap.add tl.data (LocalVar locals)
+			   in expr_to_ir env (locals + 2) bnempty )
+		       @ [ DeAlloc 2 ; Branch lcont ; Label lempty ]
+		       @ (expr_to_ir env locals bempty)
+		       @ [ Label lcont ]					  
+		    | Do l  ->
 		       List.fold_left (fun ir expr -> ir @ expr_to_ir env locals expr) [] l
                     | Return -> [Value (Imm 0)]
               end

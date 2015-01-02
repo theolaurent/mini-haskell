@@ -60,28 +60,31 @@ let exit_code code =
 
 let error =
   comment "error primtive"
-  ++ move t0 a0
+  ++ move a1 a0
   ++ la a0 alab "error_msg"
   ++ li v0 4
   ++ syscall            ++ comment "print string"
-  ++ move a0 t0
-  ++ lw t0 areg (0, a0) ++ comment "load the tag of the list"
-  ++ li t1 Tag.cons     ++ comment "tag of cons"
-  ++ li v0 11
+  ++ lw t0 areg (0, a1) ++ comment "load the tag of the list"
   ++ j "end_loop_error"
   ++ label "start_loop_error"
-  ++ lw t0 areg (8, a0) ++ comment "load the tail"
-  ++ lw a0 areg (4, a0) ++ comment "load the head"
+  ++ lw v0 areg (4, a1)
+  ++ jal "force"	 
+  ++ lw a0 areg (4, v0) ++ comment "load the head"
+  ++ li v0 11
   ++ syscall            ++ comment "print char"
-  ++ move a0 t0
-  ++ lw t0 areg (0, a0)
+  ++ lw v0 areg (8, a1) ++ comment "load the tail"
+  ++ jal "force"
+  ++ move a1 v0
+  ++ lw t0 areg (0, a1)
   ++ label "end_loop_error"
+  ++ li t1 Tag.cons     ++ comment "tag of cons"
   ++ beq t0 t1 "start_loop_error"
   ++ exit_code 1
 
 	    
 let putChar =
   comment "putChar primitive"
+  ++ lw a0 areg (4, a0)
   ++ li v0 11
   ++ syscall
 
@@ -274,6 +277,11 @@ and compile_instr ir = match ir with
      ++ move t1 v0
      ++ allocate 12
      ++ sw t0 areg (4, v0)
-     ++ sw t0 areg (8, v0)
+     ++ sw t1 areg (8, v0)
      ++ li t0 Tag.cons
      ++ sw t0 areg (0, v0)
+  | ApplyUncons ->
+     lw t0 areg (4, v0)
+     ++ push t0
+     ++ lw t0 areg (8, v0)
+     ++ push t0
