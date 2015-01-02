@@ -21,7 +21,7 @@ module Tag =
 
 (* boolean false is 0 *)
 
-(* a0 and a1 should always be restored (they contains the current argument and closure respectively *)
+(* s0 and s1 should always be restored (they contains the current argument and closure respectively *)
 
 (* current environement is pointed by register ... *)
 
@@ -53,9 +53,13 @@ let force =
   ++ pop ra
   ++ jr ra
 
+let exit_code code =
+  li a0 code
+  ++ li v0 10
+  ++ syscall
 
 let error =
-  label "error"
+  comment "error primtive"
   ++ move t0 a0
   ++ la a0 alab "error_msg"
   ++ li v0 4
@@ -73,23 +77,49 @@ let error =
   ++ lw t0 areg (0, a0)
   ++ label "end_loop_error"
   ++ beq t0 t1 "start_loop_error"
-  ++ li a0 2
-  ++ li v0 10
+  ++ exit_code 1
+
+	    
+let putChar =
+  comment "putChar primitive"
+  ++ li v0 11
   ++ syscall
 
-       
-	
+let divC d r1 r2 =
+  bnez r2 "divC"
+  ++ la t0 alab "div_by_zero"
+  ++ li v0 4
+  ++ syscall
+  ++ exit_code 1
+  ++ label "divC"
+  ++ div d r1 oreg r2
+
+let remC d r1 r2 =
+  bnez r2 "remC"
+  ++ la t0 alab "div_by_zero"
+  ++ li v0 4
+  ++ syscall
+  ++ exit_code 1
+  ++ label "remC"
+  ++ rem d r1 oreg r2
+
+	 
 let error_msg =
   label "error_msg"
   ++ asciiz "error : "
-	
+
+let div_by_zero_msg =
+  label "div_by_zero"
+  ++ asciiz "error : division by zero\n"
+
+
 (* Store the env in memory [ *r + delta ; *r + delta + 4 * (length env - 1)]
    r must be different from a1, sp, ra
    I've assumed the environment starts at sp but I'm probably wrong...
  *)
 let read_variable dest var =
   match var with
-  | GlobalVar s -> lw dest alab s
+  | GlobalVar s -> lw dest alab ("G" ^ s)
   | LocalVar i -> lw dest areg (- 4 * (i + 3), fp)
   (* note : first element of the frame are ra, s0, s1, local variables start at $fp - 4 *)
   | ClosureVar i -> lw dest areg (4 * (i + 2), s1)
@@ -98,9 +128,9 @@ let read_variable dest var =
 
 let write_variable src var =
   match var with
-  | GlobalVar s -> sw src alab s
+  | GlobalVar s -> sw src alab ("G" ^ s)
   | LocalVar i -> sw src areg (- 4 * (i + 3), fp)
-  | ClosureVar i -> (Printf.printf "ICE : trying to write the environment" ; exit 2)
+  | ClosureVar _ -> (Printf.printf "ICE : trying to write the environment" ; exit 2)
   | ArgVar -> (Printf.printf "ICE : try to write the argument" ; exit 2)
 
 let write_env env (delta, r) =
@@ -136,7 +166,8 @@ let binary_primtives =
   |> StringMap.add "geq"   (sge)
   |> StringMap.add "eq"    (seq)
   |> StringMap.add "neq"   (sne)
-
+  |> StringMap.add "rem"   (remC)
+  |> StringMap.add "div"   (divC)
 
        
 let rec compile_value v = match v with
@@ -177,7 +208,7 @@ let rec compile_value v = match v with
      ++ compile_value (Clos (l, env))
      ++ move t0 v0
      ++ pop v0
-     ++ lw t0 areg (4, v0)             ++ comment "store the closure"
+     ++ sw t0 areg (4, v0)             ++ comment "store the closure"
 						  
 and compile_instr ir = match ir with
   | Force ->
@@ -195,28 +226,26 @@ and compile_instr ir = match ir with
      lw t0 areg (4, v0)
      ++ beqz t0 (compile_label l)
   | CallFun ->
-     move t0 a0
-     ++ move t1 a1
-     ++ move a1 v0
+     move a1 v0
      ++ pop a0
-     ++ push t0
-     ++ push t1
      ++ lw t0 areg (4, a1)
-     ++ push fp
-     ++ push ra
      ++ jalr t0
-     ++ pop ra
-     ++ pop fp
-     ++ pop a1
-     ++ pop a0
 	    (*   And the result is in v0  *)
-   (* TODO : How do we load the environment ? *)
+  (* TODO : How do we load the environment ? *)
+  | StartCall ->
+     push fp
+     ++ push ra
+     ++ move fp sp (* is that right ? *)
+     ++ push s0
+     ++ push s1
+     ++ move s0 a0
+     ++ move s1 a1
   | ReturnCall ->
       pop s1
      ++ pop s0
      ++ pop ra
-     ++ 
-     jr ra
+     ++ pop fp 
+     ++ jr ra
   | ReturnForce -> nop (* No need to do anything *)
   (* To implement once we decided environment representation *)		     
   | Alloc n -> sub sp sp oi (4 * n)
@@ -232,6 +261,14 @@ and compile_instr ir = match ir with
      ++ sw t0 areg (4, v0)
      ++ li t0 Tag.int
      ++ sw t0 areg (0, v0)
+  | UnPrim s ->
+     begin
+       move a0 v0 ++
+       match s with
+       | "error" -> error
+       | "putChar" -> putChar ++ compile_value (Imm 0)
+       | _ -> Utils.exhaust_pattern ()
+     end
   | ApplyCons ->
      pop t0
      ++ move t1 v0

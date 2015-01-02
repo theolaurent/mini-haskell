@@ -34,6 +34,7 @@ type ir =
   | BranchTrue of label
   | BranchFalse of label
   | CallFun (* no need of number arg, always one *)
+  | StartCall
   | ReturnCall
   | ReturnForce
   | Alloc of int (* allocate an given number of variables on the stack *)
@@ -41,6 +42,7 @@ type ir =
                    (* is it really usefull ? there will always be a Return after that (?) *)
   | Fetch of variable
   | Store of variable (* change the content of a variable to the current value ; will be usefull for recursive definitions, cf let bindings *)
+  | UnPrim of string
   | BinPrim of string
   | ApplyCons
 		 
@@ -58,10 +60,37 @@ let index l x =
   | h :: t -> if h = x then i else loop t (i + 1)
   in loop l 0
 
-let calc_free_vars_ast (ast:typed_ast) : free_vars_ast = (* TODO : the transformation from lists to set has become usefull ! *)
+let calc_free_vars_ast ast(*:typed_ast*) : free_vars_ast = (* TODO : the transformation from lists to set has become usefull ! *)
   let f set _ = VarSet.fold (fun x res -> x :: res) set []
   in gen_traversal f (annot_free_vars ast)
 
+let clos_of_binop bin =
+  let func1 = next_label () in
+  let func2 = next_label () in
+  let cont1  = next_label () in
+  let cont2 = next_label () in
+  [ Branch cont1 ; Label func1 ;
+    StartCall ; Branch cont2 ; Label func2 ;
+    StartCall ; Fetch (ClosureVar 0) ; Force ; Alloc 1 ; Store (LocalVar 0) ;
+    Fetch ArgVar ; Force ; BinPrim bin ; ReturnCall ;
+    Label cont2 ; Value (Clos (func2, [ArgVar])) ; ReturnCall ;
+    Label cont1 ; Value (Clos (func1, [])) ]
+
+let clos_of_unop un =
+  let func = next_label () in
+  let cont = next_label () in
+  [ Branch cont ; Label func ;
+    StartCall ; Fetch ArgVar ; Force ; UnPrim un ; ReturnCall ;
+    Label cont ; Value (Clos (func, [])) ]
+
+let primitives =
+  clos_of_binop "div" @ [Store (GlobalVar "div")]
+  @ clos_of_binop "rem" @ [Store (GlobalVar "rem")]
+  @ clos_of_unop "error" @ [Store (GlobalVar "error")]
+  @ clos_of_unop "putChar" @ [Store (GlobalVar "putChar")] 
+		      
+    
+		   
 		   
 let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match ast.data with
   | Const c -> begin match c with
@@ -85,7 +114,7 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
      let lfunc = next_label () in
      let lcont = next_label () in
      let clos_env = List.map (fun s -> VarMap.find s env) ast.annot in
-     [ Branch lcont ; Label lfunc ]
+     [ Branch lcont ; Label lfunc ; StartCall ]
      @ (expr_to_ir new_env 0 body)
      @ [ ReturnCall ; Label lcont ; Value (Clos (lfunc, clos_env)) ]
   | App ({ data = App ({ data = Const (CPrim "and") ; _ }, e1) ; _ }, e2) ->
@@ -119,7 +148,7 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
   | Let (binds, body) ->
      let n = List.length binds in
      let new_env =
-       List.fold_left (fun (map, i) ({data = v}, _) -> (VarMap.add v (LocalVar i) map, succ i)) (env, locals) binds
+       List.fold_left (fun (map, i) ({data = v ; _}, _) -> (VarMap.add v (LocalVar i) map, succ i)) (env, locals) binds
        |> fst
      in
      [ Alloc n ]
@@ -140,8 +169,9 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
                        @ [ Label lcont ]
                     | Case _ -> failwith "TODO"
                     (* why not just expand case into if + lambda ? *)
-                    | Do _ -> failwith "TODO"
-                    | Return -> failwith "TODO"
+                    | Do l  ->
+		       List.fold_left (fun ir expr -> ir @ expr_to_ir env locals expr) [] l
+                    | Return -> [Value (Imm 0)]
               end
 and froze env e =
   let new_env =
@@ -151,6 +181,6 @@ and froze env e =
   let lfroz = next_label () in
   let lcont = next_label () in
   let froz_env = List.map (fun s -> VarMap.find s env) e.annot in (* get the indices of all free variables to build the env of the closure *)
-  [ Branch lcont ; Label lfroz ]
+  [ Branch lcont ; Label lfroz ; StartCall ]
   @ (expr_to_ir new_env 0 e) (* no need of a "return" ?? to see with the force function *)
-  @ [ ReturnForce ; Label lcont ; Value (Froz (lfroz, froz_env)) ]
+  @ [ ReturnCall ; Label lcont ; Value (Froz (lfroz, froz_env)) ]
