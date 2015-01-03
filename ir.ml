@@ -16,12 +16,18 @@ type variable =
 
 module VarMap = Map.Make (struct type t = var let compare = compare end)
 		       
+
+type alloc =
+  | AImm
+  | ACons
+  | AClos of int (* env length *)
+  | AFroz
 			 
 type label = L of int
 type env = value list
 and value =
   | Imm of int
-  | Cons of value * value
+  | Cons
   | Clos of label * variable list
   (* The variable list states where to find the variables when copying them to the environement of the closure *)
   | Froz of label * variable list
@@ -29,6 +35,7 @@ and value =
 type ir =
   | Force (* force the current value i.e. the content of v0 *)
   | Label of label
+  | Alloc of alloc
   | Value of value
   | Branch of label
   | BranchTrue of label
@@ -37,9 +44,9 @@ type ir =
   | StartCall
   | ReturnCall
   | ReturnForce
-  | Alloc of int (* allocate an given number of variables on the stack *)
-  | DeAlloc of int (* deallocate an given number of variables on the stack *)
-                   (* is it really usefull ? there will always be a Return after that (?) *)
+  | Push (* push v0 *)
+  | Pop of int (* deallocate an given number of variables on the stack *)
+  (* is it really usefull ? there will always be a Return after that (?) *)
   | Fetch of variable
   | Store of variable (* change the content of a variable to the current value ; will be usefull for recursive definitions, cf let bindings *)
   | UnPrim of string
@@ -72,17 +79,17 @@ let clos_of_binop bin =
   let cont2 = next_label () in
   [ Branch cont1 ; Label func1 ;
     StartCall ; Branch cont2 ; Label func2 ;
-    StartCall ; Fetch (ClosureVar 0) ; Force ; Alloc 1 ; Store (LocalVar 0) ;
+    StartCall ; Fetch (ClosureVar 0) ; Force ; Push ;
     Fetch ArgVar ; Force ; BinPrim bin ; ReturnCall ;
-    Label cont2 ; Value (Clos (func2, [ArgVar])) ; ReturnCall ;
-    Label cont1 ; Value (Clos (func1, [])) ]
+    Label cont2 ; Alloc (AClos 1) ; Value (Clos (func2, [ArgVar])) ; ReturnCall ;
+    Label cont1 ; Alloc (AClos 0) ; Value (Clos (func1, [])) ]
 
 let clos_of_unop un =
   let func = next_label () in
   let cont = next_label () in
   [ Branch cont ; Label func ;
     StartCall ; Fetch ArgVar ; Force ; UnPrim un ; ReturnCall ;
-    Label cont ; Value (Clos (func, [])) ]
+    Label cont ; Alloc (AClos 0) ; Value (Clos (func, [])) ]
 
 let primitives =
   clos_of_binop "div" @ [Store (GlobalVar "div")]
@@ -90,34 +97,47 @@ let primitives =
   @ clos_of_unop "error" @ [Store (GlobalVar "error")]
   @ clos_of_unop "putChar" @ [Store (GlobalVar "putChar")] 
 		      
-    
+
+let filter_out_globals env free_vars =
+  List.filter (fun s -> VarMap.mem s env) free_vars
+			       
+let closure_env _ free_vars =
+  List.fold_left (fun (e, i) s -> (VarMap.add s (ClosureVar i) e, succ i))
+		 (VarMap.empty, 0) free_vars
+  |> fst
 		   
-		   
+let const_to_ir c =
+  match c with
+  | CUnit -> [ Value (Imm 0) ]
+  | CBool b -> [ Value (Imm (if b then 1 else 0)) ]
+  | CInt i -> [ Value (Imm i) ]
+  | CChar c -> [ Value (Imm (int_of_char c)) ]
+  | CPrim "empty" -> [ Value (Imm 0) ]
+        (* be carefull with partial applications *)
+       (* do not forget to force *)
+       (* TODO : change primitives from string to a variant type in the whole compiler ; *)
+  | CPrim _ -> (Printf.printf "Unexpected primtive value" ; exit 2)
+      
 let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match ast.data with
-  | Const c -> begin match c with
-                     | CUnit -> [ Value (Imm 0) ]
-                     | CBool b -> [ Value (Imm (if b then 1 else 0)) ]
-                     | CInt i -> [ Value (Imm i) ]
-                     | CChar c -> [ Value (Imm (int_of_char c)) ]
-                     | CPrim "empty" -> [ Value (Imm 0) ]
-                          (* be carefull with partial applications *)
-                          (* do not forget to force *)
-					  (* TODO : change primitives from string to a variant type in the whole compiler ; *)
-		     | CPrim _ -> (Printf.printf "Unexpected primtive value" ; exit 2)
-               end
-  | Var v -> [ Fetch (VarMap.find v env) ] (* the evaluation is not forced *)
+  | Const c ->
+     begin
+       [ Alloc (AImm) ] @ (const_to_ir c)
+     end
+  | Var v -> [ Fetch (try VarMap.find v env with Not_found -> GlobalVar v) ] (* the evaluation is not forced *)
   | Abstr ({ data = v ; _ }, body) ->
+     let free_vars = filter_out_globals env ast.annot in
      let new_env =
-       List.fold_left (fun (e, i) s -> (VarMap.add s (ClosureVar i) e, succ i)) (VarMap.empty, 0) ast.annot
-       |> fst
+       closure_env env free_vars
        |> VarMap.add v ArgVar
      in
      let lfunc = next_label () in
      let lcont = next_label () in
-     let clos_env = List.map (fun s -> VarMap.find s env) ast.annot in
+     let clos_env =
+       List.map (fun s -> VarMap.find s env) free_vars
+     in
      [ Branch lcont ; Label lfunc ; StartCall ]
      @ (expr_to_ir new_env 0 body)
-     @ [ ReturnCall ; Label lcont ; Value (Clos (lfunc, clos_env)) ]
+     @ [ ReturnCall ; Label lcont ; Alloc (AClos (List.length clos_env)) ; Value (Clos (lfunc, clos_env)) ]
   | App ({ data = App ({ data = Const (CPrim "and") ; _ }, e1) ; _ }, e2) ->
      let lcont = next_label () in
      (expr_to_ir env locals e1)
@@ -132,32 +152,34 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
      @ [ Label lcont ]
   | App ({ data = App ({ data = Const (CPrim "cons") ; _ }, e1) ; _ }, e2) ->
      (froze env e1)
-     @ [ Alloc 1 ; Store (LocalVar locals) ] (* push *)
+     @ [ Push ] (* push *)
      @ (froze env e2)
-     @ [ApplyCons] 
+     @ [ Push ; Alloc (ACons) ; Value (Cons) ] 
   | App ({ data = App ({ data = Const (CPrim s) ; _ }, e1) ; _ }, e2) ->
      (expr_to_ir env locals e1)
-     @ [ Force ; Alloc 1 ; Store (LocalVar locals) ] (* push *)
+     @ [ Force ; Push ]
      @ (expr_to_ir env (locals + 1) e2)
      @ [ Force ]
      @ [BinPrim s]
   | App (f, e) ->
      (froze env e)
-     @ [Alloc 1 ; Store (LocalVar locals)] (* I mean push *)
+     @ [ Push ]
      @ (expr_to_ir env locals f)
-     @ [ CallFun ]
+     @ [ Force ; CallFun ]
   | Let (binds, body) ->
      let n = List.length binds in
      let new_env =
        List.fold_left (fun (map, i) ({data = v ; _}, _) -> (VarMap.add v (LocalVar i) map, succ i)) (env, locals) binds
        |> fst
      in
-     [ Alloc n ]
+     ( binds
+       |> List.map (fun (_, e) -> (alloc_frozen new_env e) @ [ Push ]) (* TODO : check the indices *)
+       |> List.flatten )
      @ ( binds
-         |> List.mapi (fun i (_, e) -> (froze new_env e) @ [ Store (LocalVar i) ]) (* TODO : check the indices *)
-         |> List.flatten )
+	 |> List.mapi (fun i (_, e) -> [Fetch (LocalVar (locals + i))] @ (store_frozen new_env e))
+	 |> List.flatten)
      @ (expr_to_ir new_env (locals + n) body)
-     @ [ DeAlloc n ]
+     @ [ Pop n ]
   | Spec s -> begin match s with
                     | If (cond, ontrue, onfalse) ->
                        let lfalse = next_label () in
@@ -176,23 +198,50 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
 		       @ [ ApplyUncons ]
 		       @ ( let env = env
 				     |> VarMap.add hd.data (LocalVar locals)
-				     |> VarMap.add tl.data (LocalVar locals)
+				     |> VarMap.add tl.data (LocalVar (locals + 1))
 			   in expr_to_ir env (locals + 2) bnempty )
-		       @ [ DeAlloc 2 ; Branch lcont ; Label lempty ]
+		       @ [ Pop 2 ; Branch lcont ; Label lempty ]
 		       @ (expr_to_ir env locals bempty)
 		       @ [ Label lcont ]					  
 		    | Do l  ->
 		       List.fold_left (fun ir expr -> ir @ expr_to_ir env locals expr) [] l
-                    | Return -> [Value (Imm 0)]
+                    | Return -> [Alloc (AImm) ; Value (Imm 0)]
               end
+and alloc_frozen env e =
+  match e.data with
+  | Const _ ->
+     [Alloc (AImm)]
+  | Abstr _ ->
+     let l = List.length @@ filter_out_globals env e.annot in
+     [Alloc (AClos l)]
+  | _ ->
+     [Alloc (AFroz)]	 
+and store_frozen env e =
+  match e.data with
+  | Const c ->
+     const_to_ir c
+  | Abstr ({ data = v ; _ }, body) ->
+     let free_vars = filter_out_globals env e.annot in
+     let new_env =
+       closure_env env free_vars
+       |> VarMap.add v ArgVar
+     in
+     let lfunc = next_label () in
+     let lcont = next_label () in
+     let clos_env =
+       List.map (fun s -> VarMap.find s env) free_vars
+     in
+     [ Branch lcont ; Label lfunc ; StartCall ]
+     @ (expr_to_ir new_env 0 body)
+     @ [ ReturnCall ; Label lcont ; Value (Clos (lfunc, clos_env)) ]
+  | _ ->
+     let free_vars = filter_out_globals env e.annot in
+     let new_env = closure_env env free_vars in
+     let lfroz = next_label () in
+     let lcont = next_label () in
+     let froz_env = List.map (fun s -> VarMap.find s env) free_vars in (* get the indices of all free variables to build the env of the closure *)
+     [ Branch lcont ; Label lfroz ; StartCall ]
+     @ (expr_to_ir new_env 0 e) (* no need of a "return" ?? to see with the force function *)
+     @ [ ReturnCall ; Label lcont ; Value (Froz (lfroz, froz_env)) ]
 and froze env e =
-  let new_env =
-    List.fold_left (fun (e, i) s -> (VarMap.add s (ClosureVar i) e, succ i)) (VarMap.empty, 0) e.annot
-    |> fst
-  in
-  let lfroz = next_label () in
-  let lcont = next_label () in
-  let froz_env = List.map (fun s -> VarMap.find s env) e.annot in (* get the indices of all free variables to build the env of the closure *)
-  [ Branch lcont ; Label lfroz ; StartCall ]
-  @ (expr_to_ir new_env 0 e) (* no need of a "return" ?? to see with the force function *)
-  @ [ ReturnCall ; Label lcont ; Value (Froz (lfroz, froz_env)) ]
+  (alloc_frozen env e) @ (store_frozen env e)

@@ -41,8 +41,8 @@ let force =
   ++ label "force_frozen"
   ++ push ra
   ++ push v0
-  ++ lw t1 areg (4, v0) ++ comment "load the closure"
-  ++ lw t0 areg (4, t1) ++ comment "load the code ptr"
+  ++ lw a1 areg (4, v0) ++ comment "load the closure"
+  ++ lw t0 areg (4, a1) ++ comment "load the code ptr"
   ++ jalr t0            ++ comment "evaluate function"
   ++ jal "force"        ++ comment "recursively apply force on the result"
   ++ comment "At this point, the result of this force is in v0"
@@ -172,54 +172,55 @@ let binary_primtives =
   |> StringMap.add "rem"   (remC)
   |> StringMap.add "div"   (divC)
 
-       
-let rec compile_value v = match v with
-  | Imm i ->
+let compile_alloc a = match a with
+  | AImm ->
      allocate 8            ++ comment "enough space for a tag + an integer"
      ++ comment "address of the allocated space is now in $v0"
      ++ li t0 Tag.int      ++ comment "0 is the tag for integers"
-     ++ sw t0 areg (0, v0) ++ comment "store the tag"
-     ++ li t0 i
-  ++ sw t0 areg (4, v0) ++ comment "store the immediate value"
-  | Cons (v1, v2) ->
+  | ACons ->
      allocate 12           ++ comment "space for tag + hd + tl"
      ++ li t0 Tag.cons     ++ comment "tag for cons"
      ++ sw t0 areg (0, v0) ++ comment "store the tag"
-     ++ push v0            ++ comment "save addresse of allocated space"
-     ++ comment "allocate head"
-     ++ compile_value v1
-     ++ peek t0
-     ++ sw v0 areg (4, t0) ++ comment "store the head"
-     ++ comment "allocate tail"
-     ++ compile_value v2
-     ++ pop t0
-     ++ sw v0 areg (8, t0) ++ comment "store the tail"
-     ++ move v0 t0
-  | Clos (l, env) ->
-     let env_lgth = List.length env in
+  | AClos env_lgth ->
      allocate ((env_lgth + 2) * 4)   ++ comment "space for tag + code ptr + env"
      ++ li t0 Tag.closure            ++ comment "tag for closure"
      ++ sw t0 areg (0, v0)           ++ comment "store tag"
-     ++ la t0 alab (compile_label l) ++ comment "code ptr"
-     ++ sw t0 areg (4, v0)           ++ comment "store code ptr"
-     ++ write_env env (8, v0)
-  | Froz (l, env) ->
+  | AFroz ->
      allocate 8                       ++ comment "space for tag + closure"
      ++ li t0 Tag.frozen              ++ comment "tag for frozen blocks"
      ++ sw t0 areg (0, v0)            ++ comment "store the tag"
-     ++ push v0
-     ++ compile_value (Clos (l, env))
+    
+let rec compile_store_value v = match v with
+  | Imm i ->
+     sw t0 areg (0, v0) ++ comment "store the tag"
+     ++ li t0 i
+     ++ sw t0 areg (4, v0) ++ comment "store the immediate value"
+  | Cons ->
+     pop t0
+     ++ sw t0 areg (8, v0) ++ comment "store the tail"
+     ++ pop t0
+     ++ sw t0 areg (4, v0) ++ comment "store the head"
+  | Clos (l, env) ->
+     la t0 alab (compile_label l)    ++ comment "code ptr"
+     ++ sw t0 areg (4, v0)           ++ comment "store code ptr"
+     ++ write_env env (8, v0)
+  | Froz (l, env) ->
+     push v0
+     ++ compile_alloc (AClos (List.length env))
+     ++ compile_store_value (Clos (l, env))
      ++ move t0 v0
      ++ pop v0
      ++ sw t0 areg (4, v0)             ++ comment "store the closure"
 						  
-and compile_instr ir = match ir with
+let compile_instr ir = match ir with
   | Force ->
      jal "force"
   | Label l ->
      label (compile_label l)
+  | Alloc a ->
+     compile_alloc a
   | Value v ->
-     compile_value v (* modify registers (t0, t1, a0, v0) but neither sp nor ra *)
+     compile_store_value v (* modify registers (t0, t1, a0, v0) but neither sp nor ra *)
   | Branch l ->
      b (compile_label l)
   | BranchTrue l ->
@@ -251,8 +252,8 @@ and compile_instr ir = match ir with
      ++ jr ra
   | ReturnForce -> nop (* No need to do anything *)
   (* To implement once we decided environment representation *)		     
-  | Alloc n -> sub sp sp oi (4 * n)
-  | DeAlloc n -> popn (4 * n)
+  | Push -> push v0
+  | Pop n -> popn (4 * n)
   | Fetch v -> read_variable v0 v
   | Store v -> write_variable v0 v
   | BinPrim s ->
@@ -269,11 +270,14 @@ and compile_instr ir = match ir with
        move a0 v0 ++
        match s with
        | "error" -> error
-       | "putChar" -> putChar ++ compile_value (Imm 0)
+       | "putChar" -> putChar
+		      ++ compile_alloc AImm
+		      ++ compile_store_value (Imm 0)
        | _ -> Utils.exhaust_pattern ()
      end
   | ApplyCons ->
-     pop t0
+     comment "Apply cons"
+     ++ pop t0
      ++ move t1 v0
      ++ allocate 12
      ++ sw t0 areg (4, v0)
@@ -281,7 +285,9 @@ and compile_instr ir = match ir with
      ++ li t0 Tag.cons
      ++ sw t0 areg (0, v0)
   | ApplyUncons ->
-     lw t0 areg (4, v0)
+     comment "Apply uncons"
+     ++ lw t0 areg (4, v0)
      ++ push t0
      ++ lw t0 areg (8, v0)
      ++ push t0
+ 

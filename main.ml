@@ -93,14 +93,14 @@ let () =
 	) defsType
     end ;
 
-  let env =
+  let _ =
     List.fold_left
-      (fun env ({ Ast.data = s ; _ }, _) -> Ir.VarMap.add s (Ir.GlobalVar s) env) 
-      Ir.VarMap.empty defs
-    |> Ir.VarMap.add "putChar" (Ir.GlobalVar "putChar")
-    |> Ir.VarMap.add "error"   (Ir.GlobalVar "error")
-    |> Ir.VarMap.add "div"     (Ir.GlobalVar "div")
-    |> Ir.VarMap.add "rem"     (Ir.GlobalVar "rem")
+      (fun globals ({ Ast.data = s ; _ }, _) -> Ast.VarSet.add s globals) 
+      Ast.VarSet.empty defs
+    |> Ast.VarSet.add "putChar"
+    |> Ast.VarSet.add "error"
+    |> Ast.VarSet.add "div"
+    |> Ast.VarSet.add "rem"
   in
   
   let ir =
@@ -108,7 +108,7 @@ let () =
       List.fold_left
 	(fun ir ({ Ast.data = s ; _ }, expr) ->
 	 let expr = Ir.calc_free_vars_ast expr in
-	 ir @ Ir.expr_to_ir env 0 expr @ [Ir.Store (Ir.GlobalVar s)])
+	 ir @ Ir.froze Ir.VarMap.empty expr @ [Ir.Store (Ir.GlobalVar s)])
 	Ir.primitives defs
     in
     ir @ [Ir.Fetch (Ir.GlobalVar "main") ; Ir.Force]
