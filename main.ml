@@ -1,6 +1,7 @@
 (* Main Program *)
 open Typer
-
+open Mips
+       
 let usage = "usage: petitghc [options] file.hs"
 
 let parse_only = ref false
@@ -108,5 +109,51 @@ let () =
 	 Format.fprintf Format.std_formatter "%s :: %a\n"
    			x Schema_printer.print_schema (Schema.normal_form s.Schema.value)
 	) defsType
-    end
+    end ;
 
+  let _ =
+    List.fold_left
+      (fun globals ({ Ast.data = s ; _ }, _) -> Ast.VarSet.add s globals) 
+      Ast.VarSet.empty defs
+    |> Ast.VarSet.add "putChar"
+    |> Ast.VarSet.add "error"
+    |> Ast.VarSet.add "div"
+    |> Ast.VarSet.add "rem"
+  in
+  
+  let ir =
+    let ir =
+      List.fold_left
+	(fun ir ({ Ast.data = s ; _ }, expr) ->
+	 let expr = Ir.calc_free_vars_ast expr in
+	 ir @ Ir.froze Ir.VarMap.empty expr @ [Ir.Store (Ir.GlobalVar s)])
+	Ir.primitives defs
+    in
+    ir @ [Ir.Fetch (Ir.GlobalVar "main") ; Ir.Force]
+  in
+  let code = List.fold_left (fun code instr -> code ++ Compile.compile_instr instr)
+			    nop ir
+  in
+  let data =
+    List.fold_left (fun code ({ Ast.data = s ; _}, _) -> code ++ label ("G" ^ s) ++ dword [0])
+		   nop defs
+  in
+  let program = 
+      {
+	text =
+	  label "main"
+	  ++ code
+	  ++ Compile.exit_code 0
+	  ++ Compile.force ;
+	data =
+	  Compile.error_msg
+	  ++ Compile.div_by_zero_msg
+	  ++ label "GputChar" ++ dword [0]
+	  ++ label "Gerror" ++ dword [0]
+	  ++ label "Gdiv" ++ dword [0]
+	  ++ label "Grem" ++ dword [0]
+	  ++ data
+      }
+  in
+  let file = String.sub file 0 (String.rindex file '.' + 1) ^ "s" in
+  print_in_file ~file program

@@ -37,12 +37,61 @@ type typed_ast = (pos * [ `Ty of unit ]) gen_ast
 type typed_def = (pos * [ `Ty of unit ]) gen_def
 
 let annotate pos ?ty ast =
- let t = match ty with
- | None -> `Unty
- | Some t -> `Annot t
- in { annot = (pos, t) ; data = ast }
-
+  let t = match ty with
+    | None -> `Unty
+    | Some t -> `Annot t
+  in { annot = (pos, t) ; data = ast }
+       
 module Primitive = Map.Make(String);;
+  
+
+ (* A gereric way to apply function to an annotated ast *)
+let gen_traversal (f_ast:'a -> 'b gen_ast_s -> 'b) (ast:'a gen_ast) : 'b gen_ast =
+  let rec loop_ast ast =
+    let wrap_ast x = { data = x ; annot = f_ast ast.annot x } in
+    let wrap_var x = { data = x ; annot = f_ast ast.annot (Var x) } in (* quite an ugly hack *)
+    let do_spec s = match s with
+      | If (e1, e2, e3) -> If (loop_ast e1, loop_ast e2, loop_ast e3)
+      | Case (e, nilcase, { data = vh ; _ }, { data = vt ; _ }, conscase) ->
+         Case (loop_ast e, loop_ast nilcase, wrap_var vh, wrap_var vt, loop_ast conscase)
+      | Do le -> Do (List.map loop_ast le)
+      | Return -> Return
+    in
+    match ast.data with
+    | (Const _ as x)
+    | (Var _ as x) -> wrap_ast x
+    | Abstr ({ data = v ; _ }, body) -> wrap_ast (Abstr (wrap_var v, loop_ast body))
+    | App (f, e) -> wrap_ast (App (loop_ast f, loop_ast e))
+    | Let (binds, body) ->
+       wrap_ast (Let (List.map (fun ({ data = v ; _ }, e) -> (wrap_var v, loop_ast e)) binds,
+                      loop_ast body))
+    | Spec s -> wrap_ast (Spec (do_spec s))
+  in loop_ast ast
+
+
+module VarSet = Set.Make (struct type t = var let compare = Pervasives.compare end)
+
+let annot_free_vars ast =
+  let f _ ast = match ast with
+    | Const _ -> VarSet.empty
+    | Var v -> VarSet.singleton v
+    | Abstr ({ data = v ; _ }, body) -> VarSet.remove v body.annot
+    | App (f, e) -> VarSet.union f.annot e.annot
+    | Let (binds, body) -> (* Definitions are recursive by default *)
+       let allfvars = List.fold_left (fun res (_, e) -> VarSet.union res e.annot) body.annot binds in
+       let boundvars = List.fold_left (fun res (v, _) -> VarSet.union res (VarSet.singleton v.data)) VarSet.empty binds in
+       VarSet.diff allfvars boundvars
+    | Spec s -> begin match s with
+                      | If (e1, e2, e3) -> VarSet.union (VarSet.union e1.annot e2.annot) e3.annot
+                      | Case (e, nilcase, vh, vt, conscase) ->
+                         VarSet.union (VarSet.union e.annot nilcase.annot)
+                                      (VarSet.remove vh.data (VarSet.remove vt.data conscase.annot))
+                      | Do le -> List.fold_left (fun res e -> VarSet.union res e.annot) VarSet.empty le
+                      | Return -> VarSet.empty
+                end
+  in gen_traversal f ast
+
+
 
 (* TODO : make a diffenrece between the position of the primitive keyword
    and the positions of the whole primitive application *)
