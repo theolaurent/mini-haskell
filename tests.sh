@@ -3,13 +3,20 @@ command="./petitghc"
 test_good() {
     for f in $@ ;
     do
-	$command $f || echo "Good test fail: $f" ;
+	if $command $f ;
+	then echo "Test pass : $f" ;
+	else echo "Good test fail: $f" ;
+	fi
     done
+    
 }
 test_bad() {
     for f in $@ ;
     do
-	$command $f && echo "Bad test pass: $f" ;
+	if $command $f
+	then echo "Bad test pass: $f" ;
+	else echo "Test pass : $f"
+	fi
     done
 }
 

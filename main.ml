@@ -111,6 +111,9 @@ let () =
 	) defsType
     end ;
 
+  if !type_only
+  then exit 0 ;
+  
   let _ =
     List.fold_left
       (fun globals ({ Ast.data = s ; _ }, _) -> Ast.VarSet.add s globals) 
