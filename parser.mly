@@ -27,8 +27,8 @@ let check_uniqueness name spos epos l =
     ) (pred l)
 
 
-let ann spos epos ?ty ast =
-  annotate (pos spos epos) ?ty ast
+let ann spos epos ?ty expr =
+  annotate (pos spos epos) ?ty expr
 
 module Id =
 struct
@@ -110,7 +110,7 @@ def0:
     check_uniqueness Id.name Id.spos Id.epos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) ?ty id in
-        (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
+        (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
       ) e
   }
 | id = ID0 l = list(identifier) EQ e = expr
@@ -118,7 +118,7 @@ def0:
     check_uniqueness Id.name Id.spos Id.epos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) id in
-        (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
+        (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
       ) e
   }
   
@@ -130,7 +130,7 @@ def:
     check_uniqueness Id.name Id.spos Id.epos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) ?ty id in
-        (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
+        (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
       ) e    
   }
 | id = ID l = list(identifier) EQ e = expr
@@ -138,7 +138,7 @@ def:
     check_uniqueness Id.name Id.spos Id.epos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) id in
-        (id, ast_lambda (pos $startpos(id) $endpos(e)) l e)
+        (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
       ) e
   }
 
@@ -186,7 +186,7 @@ simple_expr:
 | c = const { map Utils.id c }
 | LBK l = separated_list(COM, expr) RBK
   {
-    map (ast_list (pos $startpos($1) $endpos($3))) (sequence l)
+    map (expr_list (pos $startpos($1) $endpos($3))) (sequence l)
   }
 | LBK error RBK { parsing_error "..." $startpos($2) $endpos($2) }
 
@@ -197,13 +197,13 @@ expr:
   }
 | l = nonempty_list(simple_expr)
   {
-    map (fun x -> ast_app (pos $startpos(l) $endpos(l))
+    map (fun x -> expr_app (pos $startpos(l) $endpos(l))
             (List.hd x) (List.tl x)) (sequence l)
   }
 | BSLASH l = nonempty_list(identifier) ARR e = expr
   {
     check_uniqueness Id.name Id.spos Id.epos l ;
-    map (fun e -> ast_lambda (pos $startpos($1) $endpos(e)) l e) e
+    map (fun e -> expr_lambda (pos $startpos($1) $endpos(e)) l e) e
   }
 | BSLASH ARR expr
   {
@@ -211,28 +211,28 @@ expr:
   } 
 | MINUS e = expr %prec UMINUS
   {
-    map (ast_unary_minus @@ pos $startpos($1) $endpos(e)) e
+    map (expr_unary_minus @@ pos $startpos($1) $endpos(e)) e
   }
-| a = expr OR    b = expr { map2 (ast_or    @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr AND   b = expr { map2 (ast_and   @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr LT    b = expr { map2 (ast_lt    @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr LEQ   b = expr { map2 (ast_leq   @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr GT    b = expr { map2 (ast_gt    @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr GEQ   b = expr { map2 (ast_geq   @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr EQEQ  b = expr { map2 (ast_eq    @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr NEQ   b = expr { map2 (ast_neq   @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr COL   b = expr { map2 (ast_cons  @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr PLUS  b = expr { map2 (ast_plus  @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr MINUS b = expr { map2 (ast_minus @@ pos $startpos(a) $endpos(b)) a b }
-| a = expr MULT  b = expr { map2 (ast_mult  @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr OR    b = expr { map2 (expr_or    @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr AND   b = expr { map2 (expr_and   @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr LT    b = expr { map2 (expr_lt    @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr LEQ   b = expr { map2 (expr_leq   @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr GT    b = expr { map2 (expr_gt    @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr GEQ   b = expr { map2 (expr_geq   @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr EQEQ  b = expr { map2 (expr_eq    @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr NEQ   b = expr { map2 (expr_neq   @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr COL   b = expr { map2 (expr_cons  @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr PLUS  b = expr { map2 (expr_plus  @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr MINUS b = expr { map2 (expr_minus @@ pos $startpos(a) $endpos(b)) a b }
+| a = expr MULT  b = expr { map2 (expr_mult  @@ pos $startpos(a) $endpos(b)) a b }
 | IF c = expr THEN a = expr ELSE b = expr
   {
-    map3 (ast_if @@ pos $startpos($1) $endpos(b)) c a b
+    map3 (expr_if @@ pos $startpos($1) $endpos(b)) c a b
   }
 | LET l = binds IN e = expr
   {
     iter (check_uniqueness Def.name Def.spos Def.epos) l ;
-    map2 (ast_let @@ pos $startpos($1) $endpos(e)) l e
+    map2 (expr_let @@ pos $startpos($1) $endpos(e)) l e
   }
 | CASE e = expr OF LB
   LBK RBK ARR x = expr SCOL
@@ -241,7 +241,7 @@ expr:
     check_uniqueness Id.name Id.spos Id.epos [hd ; tl] ;
     map3
       (fun e x y ->
-         ast_case (pos $startpos($1) $endpos($16)) e x hd tl y
+         expr_case (pos $startpos($1) $endpos($16)) e x hd tl y
       ) e x y
   }
 | DO LB l = opt_separated_list(SCOL, expr) RB
@@ -252,14 +252,14 @@ expr:
           | _ -> None
       ) l (Some [])
     in
-    map (ast_do @@ pos $startpos($1) $endpos($4)) l
+    map (expr_do @@ pos $startpos($1) $endpos($4)) l
   }
 | DO LB SCOL RB 
   { parsing_error "do expects one or more expressions" $startpos($2) $endpos($4) }
 | DO LB RB
   { parsing_error "do expects one or more expressions" $startpos($2) $endpos($3) }
 | RETURN LP RP
-  { Some (ast_return @@ pos $startpos($1) $endpos($3)) }
+  { Some (expr_return @@ pos $startpos($1) $endpos($3)) }
   
 binds:
 | d = def { map (fun x -> [x]) d }
@@ -298,7 +298,7 @@ const:
         (fun c -> ann $startpos(s) $endpos(s) (Const (CChar c)))
         (Utils.string_to_list s)
     in
-    Some (ast_list (pos $startpos(s) $endpos(s)) l)
+    Some (expr_list (pos $startpos(s) $endpos(s)) l)
   }
 | b = BOOL { Some (ann $startpos(b) $endpos(b) (Const (CBool b))) }
 

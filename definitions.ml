@@ -16,7 +16,12 @@ let (!!) t = Ty.constructor t []
 let list t = Ty.constructor "List" [t]
 let io t = Ty.constructor "IO" [t]
 
-let prim : Schema.schema Ast.Primitive.t =
+let arithmetic = ty @@ !!"Integer" @-> !!"Integer" @-> !!"Integer"
+let comparison = ty @@ !!"Integer" @-> !!"Integer" @-> !!"Bool"
+let logical = ty @@ !!"Bool" @-> !!"Bool" @-> !!"Bool"
+let cons = (forall ??var (ty @@ tvar @-> list tvar @-> list tvar))
+			  
+(*let prim : Schema.schema Ast.Primitive.t =
   let binop n t r = 
     Ast.Primitive.add
       n (ty @@ !!t @-> !!t @-> !!r)
@@ -36,8 +41,7 @@ let prim : Schema.schema Ast.Primitive.t =
   |> Ast.Primitive.add "empty"
 		       (forall ??var (ty @@ list tvar))
   |> Ast.Primitive.add "cons"
-		       (forall ??var (ty @@ tvar @-> list tvar @-> list tvar))
-
+ *)
 let env =
   [
     ("putChar", ty @@ !!"Char" @-> io !!"()") ;

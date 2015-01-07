@@ -17,7 +17,6 @@ let spec =
     "--print-type", Arg.Set print_type, "output type of toplevel identifiers"
   ]
 
-let prim = Definitions.prim
 let env = Definitions.env
 
 module CheckMain(Err:Errors.S) =
@@ -90,7 +89,8 @@ let () =
   let module Inference = Inference.Make(TypeErr) in
   let module CheckMain = CheckMain(TypeErr) in
   let module CheckPrimitiveName = CheckPrimitiveName(TypeErr) in
-  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions prim [] env defs Lexing.dummy_pos Lexing.dummy_pos in
+  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions [] env defs Lexing.dummy_pos Lexing.dummy_pos in
+  
   CheckMain.check defs defsType ;
   CheckPrimitiveName.check defs ;
 

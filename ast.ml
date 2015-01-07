@@ -5,74 +5,99 @@ type const =
   | CBool of bool
   | CInt of int
   | CChar of char
-  | CPrim of string
+  | CEmpty
+(*  | CPrim of string *)
+
+type arithmetic_binop =
+  | Add
+  | Sub
+  | Mul
+
+type comparison_binop =
+  | LessEqual    | LessThan        (* <= ; <  *)
+  | GreaterEqual | GreaterThan     (* >= ; >  *)
+  | Equal        | NotEqual        (* == ; /= *)
+
+type logical_binop =
+  | And
+  | Or
+	   
+type binop =
+  | Arithmetic of arithmetic_binop
+  | Comparison of comparison_binop
+  | Logical of logical_binop
+  | Cons
 
 type ('a, 'b) annot = { annot : 'a ; data : 'b }
 
 type 'a annoted_var = ('a, var) annot
+				
 
-type 'a gen_ast = ('a, 'a gen_ast_s) annot
-and 'a gen_ast_s =
+type 'a gen_expr = ('a, 'a gen_expr_s) annot
+and 'a gen_expr_s =
   | Const of const
   | Var of var
   | Abstr of 'a gen_def
-  | App of 'a gen_ast * 'a gen_ast
-  | Let of ('a gen_def) list * 'a gen_ast
+  | App of 'a gen_expr * 'a gen_expr
+  | Let of ('a gen_def) list * 'a gen_expr
   | Spec of 'a spec
+  | Binop of binop * 'a gen_expr * 'a gen_expr
+
 and 'a spec =
-  | If of 'a gen_ast * 'a gen_ast * 'a gen_ast
-  | Case of 'a gen_ast * 'a gen_ast * 'a annoted_var * 'a annoted_var * 'a gen_ast
-  | Do of 'a gen_ast list
+  | If of 'a gen_expr * 'a gen_expr * 'a gen_expr
+  | Case of 'a gen_expr * 'a gen_expr * 'a annoted_var * 'a annoted_var * 'a gen_expr
+  | Do of 'a gen_expr list
   | Return
-and 'a gen_def = 'a annoted_var * 'a gen_ast
+and 'a gen_def = 'a annoted_var * 'a gen_expr
 
 type pos = Pos of Lexing.position * Lexing.position
 let pos s e = Pos (s, e)
 
 (* TODO : use this type everywhere we need a position e.g. the errors module *)
 
-type ast = (pos * [ `Unty | `Annot of Typer.Schema.schema ]) gen_ast
+type expr = (pos * [ `Unty | `Annot of Typer.Schema.schema ]) gen_expr
 type def = (pos * [ `Unty | `Annot of Typer.Schema.schema ]) gen_def
-type typed_ast = (pos * [ `Ty of unit ]) gen_ast
+type typed_expr = (pos * [ `Ty of unit ]) gen_expr
 type typed_def = (pos * [ `Ty of unit ]) gen_def
 
-let annotate pos ?ty ast =
+let annotate pos ?ty expr =
   let t = match ty with
     | None -> `Unty
     | Some t -> `Annot t
-  in { annot = (pos, t) ; data = ast }
+  in { annot = (pos, t) ; data = expr }
        
 module Primitive = Map.Make(String);;
   
 
- (* A gereric way to apply function to an annotated ast *)
-let gen_traversal (f_ast:'a -> 'b gen_ast_s -> 'b) (ast:'a gen_ast) : 'b gen_ast =
-  let rec loop_ast ast =
-    let wrap_ast x = { data = x ; annot = f_ast ast.annot x } in
-    let wrap_var x = { data = x ; annot = f_ast ast.annot (Var x) } in (* quite an ugly hack *)
+ (* A gereric way to apply function to an annotated expr *)
+let gen_traversal (f_expr:'a -> 'b gen_expr_s -> 'b) (expr:'a gen_expr) : 'b gen_expr =
+  let rec loop_expr expr =
+    let wrap_expr x = { data = x ; annot = f_expr expr.annot x } in
+    let wrap_var x = { data = x ; annot = f_expr expr.annot (Var x) } in (* quite an ugly hack *)
     let do_spec s = match s with
-      | If (e1, e2, e3) -> If (loop_ast e1, loop_ast e2, loop_ast e3)
+      | If (e1, e2, e3) -> If (loop_expr e1, loop_expr e2, loop_expr e3)
       | Case (e, nilcase, { data = vh ; _ }, { data = vt ; _ }, conscase) ->
-         Case (loop_ast e, loop_ast nilcase, wrap_var vh, wrap_var vt, loop_ast conscase)
-      | Do le -> Do (List.map loop_ast le)
+         Case (loop_expr e, loop_expr nilcase, wrap_var vh, wrap_var vt, loop_expr conscase)
+      | Do le -> Do (List.map loop_expr le)
       | Return -> Return
     in
-    match ast.data with
+    match expr.data with
     | (Const _ as x)
-    | (Var _ as x) -> wrap_ast x
-    | Abstr ({ data = v ; _ }, body) -> wrap_ast (Abstr (wrap_var v, loop_ast body))
-    | App (f, e) -> wrap_ast (App (loop_ast f, loop_ast e))
+    | (Var _ as x) -> wrap_expr x
+    | Abstr ({ data = v ; _ }, body) -> wrap_expr (Abstr (wrap_var v, loop_expr body))
+    | App (f, e) -> wrap_expr (App (loop_expr f, loop_expr e))
     | Let (binds, body) ->
-       wrap_ast (Let (List.map (fun ({ data = v ; _ }, e) -> (wrap_var v, loop_ast e)) binds,
-                      loop_ast body))
-    | Spec s -> wrap_ast (Spec (do_spec s))
-  in loop_ast ast
+       wrap_expr (Let (List.map (fun ({ data = v ; _ }, e) -> (wrap_var v, loop_expr e)) binds,
+                      loop_expr body))
+    | Spec s -> wrap_expr (Spec (do_spec s))
+    | Binop (op, x, y) -> wrap_expr (Binop (op, loop_expr x, loop_expr y))
+  in loop_expr expr
 
 
 module VarSet = Set.Make (struct type t = var let compare = Pervasives.compare end)
 
-let annot_free_vars ast =
-  let f _ ast = match ast with
+let annot_free_vars expr =
+  let f _ expr = match expr with
     | Const _ -> VarSet.empty
     | Var v -> VarSet.singleton v
     | Abstr ({ data = v ; _ }, body) -> VarSet.remove v body.annot
@@ -88,54 +113,57 @@ let annot_free_vars ast =
                                       (VarSet.remove vh.data (VarSet.remove vt.data conscase.annot))
                       | Do le -> List.fold_left (fun res e -> VarSet.union res e.annot) VarSet.empty le
                       | Return -> VarSet.empty
+		      
                 end
-  in gen_traversal f ast
+    | Binop (_, x, y) -> VarSet.union x.annot y.annot
+  in gen_traversal f expr
 
 
 
 (* TODO : make a diffenrece between the position of the primitive keyword
    and the positions of the whole primitive application *)
-let primitive pos str l =
- List.fold_left (fun res expr ->
+let binop op pos x y : expr =
+  annotate pos (Binop (op, x, y))
+(* List.fold_left (fun res expr ->
  annotate pos (App (res, expr)))
  (annotate pos (Const (CPrim str))) l
+ *)
+let expr_empty pos = annotate pos (Const CEmpty)
+let expr_cons  = binop Cons
+let expr_or    = binop (Logical Or)
+let expr_and   = binop (Logical And)
+let expr_plus  = binop (Arithmetic Add)
+let expr_minus = binop (Arithmetic Sub)
+let expr_unary_minus pos n = expr_minus pos (annotate pos (Const (CInt 0))) n
+let expr_mult  = binop (Arithmetic Mul)
+let expr_lt    = binop (Comparison LessThan)
+let expr_leq   = binop (Comparison LessEqual)
+let expr_gt    = binop (Comparison GreaterThan)
+let expr_geq   = binop (Comparison GreaterEqual)
+let expr_eq    = binop (Comparison Equal)
+let expr_neq   = binop (Comparison NotEqual)
 
-let ast_cons pos hd tl = primitive pos "cons" [hd ; tl]
-let ast_empty pos = primitive pos "empty" []
-let ast_or pos x y = primitive pos "or" [x ; y]
-let ast_and pos x y = primitive pos "and" [x ; y]
-let ast_plus pos x y = primitive pos "plus" [x ; y]
-let ast_minus pos x y = primitive pos "minus" [x ; y]
-let ast_unary_minus pos n = ast_minus pos (annotate pos (Const (CInt 0))) n
-let ast_mult pos x y = primitive pos "mult" [x ; y]
-let ast_lt pos x y = primitive pos "lt" [x ; y]
-let ast_leq pos x y = primitive pos "leq" [x ; y]
-let ast_gt pos x y = primitive pos "gt" [x ; y]
-let ast_geq pos x y = primitive pos "geq" [x ; y]
-let ast_eq pos x y = primitive pos "eq" [x ; y]
-let ast_neq pos x y = primitive pos "neq" [x ; y]
+let expr_list pos l =
+  List.fold_right (expr_cons pos) l (expr_empty pos)
 
-let ast_list pos l =
-  (List.fold_right (fun x res -> primitive pos "cons" [ x ; res ])) l (ast_empty pos)
-
-let ast_let pos l expr =
+let expr_let pos l expr =
   (* List.fold_right (fun (x,y) e -> Let (x,y, e)) l expr *)
   annotate pos (Let (l, expr))
 
-let ast_lambda pos l expr =
+let expr_lambda pos l expr =
   List.fold_right (fun i res -> annotate pos (Abstr (i, res))) l expr
 
-let ast_app pos f l = List.fold_left (fun res expr -> annotate pos (App (res, expr))) f l
+let expr_app pos f l = List.fold_left (fun res expr -> annotate pos (App (res, expr))) f l
 
 
-let ast_if pos cond btrue bfalse =
+let expr_if pos cond btrue bfalse =
   annotate pos (Spec (If (cond, btrue, bfalse)))
 
-let ast_case pos list cempty hd tl cnempty =
+let expr_case pos list cempty hd tl cnempty =
   annotate pos (Spec (Case (list, cempty, hd, tl, cnempty)))
 
-let ast_do pos instrs =
+let expr_do pos instrs =
   annotate pos (Spec (Do instrs))
 
-let ast_return pos =
+let expr_return pos =
   annotate pos (Spec (Return))

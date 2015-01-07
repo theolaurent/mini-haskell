@@ -5,9 +5,24 @@ let print_const ff = function
   | CBool b -> Format.fprintf ff "%b" b
   | CInt i -> Format.fprintf ff "%d" i
   | CChar c -> Format.fprintf ff "'%s'" (Char.escaped c)
-  | CPrim "empty" -> Format.fprintf ff "[]"
-  | CPrim s -> Format.fprintf ff "%s" s
-
+  | CEmpty -> Format.fprintf ff "[]"
+(*  | CPrim s -> Format.fprintf ff "%s" s *)
+let print_binop ff b =
+  Format.fprintf ff
+  (match b with
+   | Arithmetic Add -> "+"
+   | Arithmetic Sub -> "-"
+   | Arithmetic Mul -> "*"
+   | Comparison LessEqual -> "<="
+   | Comparison LessThan  -> "<"
+   | Comparison GreaterEqual -> ">="
+   | Comparison GreaterThan  -> ">"
+   | Comparison Equal -> "=="
+   | Comparison NotEqual -> "/="
+   | Logical And -> "&&"
+   | Logical Or  -> "||"
+   | Cons -> ":")
+			     
 
 let rec print_ast ff ast = match ast.data with
   | Spec s ->
@@ -24,7 +39,10 @@ let rec print_ast ff ast = match ast.data with
        Format.fprintf ff "let { %a} in@ %a" print_def_list l print_ast e ;
        Format.close_box ()
      end
-  and print_spec ff = function
+  | Binop (b, x, y) ->
+	  Format.fprintf ff "%a %a %a" print_ast x print_binop b print_ast y
+	    
+and print_spec ff = function
     | If (cond, btrue, bfalse) ->
        Format.fprintf ff "if %a@ then %a@ else %a"
 		      print_ast cond

@@ -35,6 +35,11 @@ let invalid_application fn arg =
     Printer.print_ast fn ;
   Format.flush_str_formatter ()
 
+let invalid_binop expr =
+  Format.fprintf (Format.str_formatter) "While type %a"
+		 Printer.print_ast expr ;
+  Format.flush_str_formatter ()
+			     
 let invalid_mutually_recursive_definition defs =
   let def =
     List.fold_left (fun s (d, _) -> s ^ ", " ^ d.data)
@@ -60,13 +65,17 @@ let invalid_instruction instr =
     Printer.print_ast instr ;
   Format.flush_str_formatter ()
 
-let infer_const prim = function
+let infer_const = function
   | CUnit -> ty (Ty.constructor "()" [])
   | CChar _ -> ty (Ty.constructor "Char" [])
   | CInt _  -> ty (Ty.constructor "Integer" [])
   | CBool _ -> ty (Ty.constructor "Bool" [])
-  | CPrim name -> Primitive.find name prim
+  | CEmpty ->
+     let v = Var.fresh () in
+     forall (v, (BFlexible, bot)) (ty (Ty.constructor "List" [Ty.variable v]))
+(*  | Cname -> Primitive.find name *)
 
+				 
 let universal_type q =
   let var = Var.fresh () in
   ((var, (BFlexible, bot)) :: q, ty (Ty.variable var))
@@ -81,14 +90,19 @@ struct
     in
     Err.report ("type error : " ^ msg) spos epos
 
+  let infer_binop = function
+    | Arithmetic _ -> Definitions.arithmetic
+    | Comparison _ -> Definitions.comparison
+    | Logical    _ -> Definitions.logical
+    | Cons         -> Definitions.cons
 
 
   (* type inference *) 
-  let rec infer prim q env expr =
+  let rec infer q env expr =
     let (Pos (spos, epos), annot) = expr.annot in
     let (q, sch) =
       match expr.data with
-      | Const c -> (q, infer_const prim c)
+      | Const c -> (q, infer_const c)
       | Var x ->
         begin
 	  try
@@ -103,7 +117,7 @@ struct
           let alpha = Var.fresh () in
           let q1 = (alpha, (BFlexible, bot)) :: q in
           let (q2, sigma) =
-	    infer prim q1 ((x.data ,ty (Ty.variable alpha)) :: env) a
+	    infer q1 ((x.data ,ty (Ty.variable alpha)) :: env) a
           in
           let beta = Var.fresh () in
           let (q3, q4) = split q2 (set_of_list (fst (List.split q))) in
@@ -114,7 +128,7 @@ struct
         | `Annot s ->
           let alpha = Var.fresh () in
           let (q1, sigma) =
-	    infer prim q ((x.data, s) :: env) a
+	    infer q ((x.data, s) :: env) a
           in
           let q2 = (alpha, (BRigid, s)) :: q1 in
           let beta = Var.fresh () in
@@ -127,8 +141,8 @@ struct
         end
       | App (a, b) ->
         begin
-	  let (q1, sigma_a) = infer prim q env a in
-	  let (q2, sigma_b) = infer prim q1 env b in
+	  let (q1, sigma_a) = infer q env a in
+	  let (q2, sigma_b) = infer q1 env b in
 	  let alpha_a = Var.fresh () in
 	  let alpha_b = Var.fresh () in
 	  let beta = Var.fresh () in
@@ -149,11 +163,37 @@ struct
         end 
       | Let (l, expr) ->
         let (q1, defs) =
-	  infer_potentially_mutually_recursive_definitions prim q env l spos epos
+	  infer_potentially_mutually_recursive_definitions q env l spos epos
         in
-        infer prim q1 (defs @ env) expr
+        infer q1 (defs @ env) expr
       | Spec s ->
-        infer_spec prim q env spos epos s
+        infer_spec q env spos epos s
+      | Binop (b, x, y) ->
+	 begin
+	   let schema_op = infer_binop b in
+	   let (q1, schema_x) = infer q  env x in
+	   let (q2, schema_y) = infer q1 env y in
+	   let alpha_op = Var.fresh () in
+	   let alpha_x = Var.fresh () in
+	   let alpha_y = Var.fresh () in
+	   let beta = Var.fresh () in
+	   try
+	     let q3 =
+	       unify ((beta, (BFlexible, bot))
+		      :: (alpha_y, (BFlexible, schema_y))
+		      :: (alpha_x, (BFlexible, schema_x))
+		      :: (alpha_op, (BFlexible, schema_op))
+		      :: q2)
+		     (Ty.variable alpha_op)
+		     (Ty.arrow (Ty.variable alpha_x)
+			       (Ty.arrow (Ty.variable alpha_y) (Ty.variable beta)))
+	     in
+	     let (q4, q5) = split q3 (set_of_list (fst (List.split q))) in
+	     (q4, forall_map q5 (ty (Ty.variable beta)))
+	   with Unification.Failure trace ->
+	     error (invalid_binop expr :: trace) spos epos ;
+	     universal_type q
+	 end
     in
     match annot with
     | `Unty -> (q, sch)
@@ -165,55 +205,76 @@ struct
       (q', s)
       (*      (ignore  polyunify q sch s ; (q, s)) *)
     
-    and infer_potentially_mutually_recursive_definitions prim q env l spos epos =     
-      let rec add_edges_from g bound x expr =
+    and infer_potentially_mutually_recursive_definitions q env l spos epos =     
+      let rec add_edges_from bound x expr (env, g) =
         match expr.data with
-        | Const _ -> g
+        | Const _ -> (env, g)
         | Var y ->
-	  if List.exists (fun (z, _) -> z = y) env || IdentSet.mem y bound
-	  then g
-	  else G.add_edge g x y
+	   if IdentSet.mem y bound
+	   then (env, g)
+	   else if List.exists (fun (z, _) -> z.data = y) l
+	   then (env, G.add_edge g x y)
+	   else if List.exists (fun (z, _) -> z = y) env
+	   then (env, g)
+	   else (* Ident is not *)
+	     begin
+	       let (Pos (spos, epos)) = fst expr.annot in
+	       let msg = "Unbound identifier " ^ y in
+	       Err.report msg spos epos ;
+	       let v = Var.fresh () in
+	       ((y, (forall (v, (BFlexible, bot)) (ty (Ty.variable v)))) :: env, g)
+	     end
         | Abstr (y, a) ->
-	  add_edges_from g (IdentSet.add y.data bound) x a
+	  add_edges_from (IdentSet.add y.data bound) x a (env, g)
         | App (a, b) ->
-	  let g = add_edges_from g bound x a in
-	  add_edges_from g bound x b
+	   (env, g)
+	   |> add_edges_from bound x a
+	   |> add_edges_from bound x b
         | Let (l, b) ->
 	  let bound =
 	    List.fold_left (fun bound (z, _) -> IdentSet.add z.data bound) bound l
 	  in
-	  let g = List.fold_left (fun g (_, a) -> add_edges_from g bound x a) g l in
-	  add_edges_from g bound x b
+	  List.fold_left
+	    (fun (env, g) (_, a) -> add_edges_from bound x a (env, g)) (env, g) l
+	  |> add_edges_from bound x b
         | Spec (If (a, b, c)) ->
-	  let g = add_edges_from g bound x a in
-	  let g = add_edges_from g bound x b in
-	  add_edges_from g bound x c
+	   (env, g)
+	   |> add_edges_from bound x a
+	   |> add_edges_from bound x b
+	   |> add_edges_from bound x c
         | Spec (Case (a, b, y, z, c)) ->
-	  let g = add_edges_from g bound x a in
-	  let g = add_edges_from g bound x b in
-	  let bound =
+	  let bound2 =
 	    bound
 	    |> IdentSet.add y.data
 	    |> IdentSet.add z.data
 	  in
-	  add_edges_from g bound x c
+	   (env, g)
+	   |> add_edges_from bound x a
+	   |> add_edges_from bound x b
+	   |> add_edges_from bound2 x c
         | Spec (Do l) ->
-	  List.fold_left (fun g a -> add_edges_from g bound x a) g l
+	   List.fold_left
+	     (fun (env, g) a -> add_edges_from bound x a (env, g)) (env, g) l
         | Spec (Return) ->
-	  g
+	   (env, g)
+	| Binop (_, a, b) ->
+	   (env, g)
+	   |> add_edges_from bound x a
+	   |> add_edges_from bound x b
       in
       if List.length l = 1
-      then infer_mutually_recursive_definitions prim q env l spos epos
+      then infer_mutually_recursive_definitions q env l spos epos
       else begin
-        let g =
+        let (env, g) =
 	  List.fold_left
-	    (fun g (x, d) ->
+	    (fun (env, g) (x, d) ->
 	       let g = G.add_vertex g x.data in
-	       add_edges_from g (IdentSet.singleton x.data) x.data d)
-	    G.empty l
+	       add_edges_from (IdentSet.singleton x.data) x.data d (env, g))
+	    (env, G.empty) l
         in
         let tl = Components.scc_list g in
-        let ls =
+
+	let ls =
 	  List.map
 	    (List.map (fun x -> List.find (fun (y, _) -> x = y.data) l))
 	    tl
@@ -221,12 +282,12 @@ struct
         List.fold_left
 	  (fun (q, vars) l ->
 	     let (q, nv) =
-	       infer_mutually_recursive_definitions prim q (vars @ env) l spos epos
+	       infer_mutually_recursive_definitions q (vars @ env) l spos epos
 	     in
 	     (q, nv @ vars)) (q, []) ls	
       end
 
-    and infer_mutually_recursive_definitions prim q env l spos epos =
+    and infer_mutually_recursive_definitions q env l spos epos =
       try
         let defVar = List.map (fun (x, _) -> (x, Var.fresh ())) l in
         let q1 = List.fold_left (fun q1 (x, a) ->
@@ -242,7 +303,7 @@ struct
         in
         let (q2,sigmaList) =
 	  List.fold_right (fun (_, d) (q2, sigmaList) ->
-	      let (q2, sigma) = infer prim q2 nEnv d in
+	      let (q2, sigma) = infer q2 nEnv d in
 	      (q2, sigma :: sigmaList)
 	    ) l (q1, [])
         in
@@ -269,10 +330,10 @@ struct
         in
         (q, defVar)
 
-    and infer_spec prim q env spos epos = function
+    and infer_spec q env spos epos = function
       | If (cond, b1, b2) ->
         begin
-	  let (q1, sigmaCond) = infer prim q env cond in
+	  let (q1, sigmaCond) = infer q env cond in
           let alpha = Var.fresh () in
           let q2 =
             try
@@ -283,8 +344,8 @@ struct
 	      error (invalid_condition cond :: trace) spos epos ;
 	      q
 	  in
-	  let (q3, sigma1) = infer prim q2 env b1 in
-	  let (q4, sigma2) = infer prim q3 env b2 in
+	  let (q3, sigma1) = infer q2 env b1 in
+	  let (q4, sigma2) = infer q3 env b2 in
 
 	  let beta1 = Var.fresh () in
 	  let beta2 = Var.fresh () in
@@ -306,7 +367,7 @@ struct
       | Case (list, bempty, hd, tl, bnempty) ->
         begin
 	  let listType = Var.fresh () in
-	  let (q1, sigmaList) = infer prim q env list in
+	  let (q1, sigmaList) = infer q env list in
 	  let alpha = Var.fresh () in
 	  let q2 =
 	    try
@@ -320,14 +381,14 @@ struct
 	      (listType, (BFlexible, bot)) :: q
 	  in
 
-	  let (q3, sigma1) = infer prim q2 env bempty in	   
+	  let (q3, sigma1) = infer q2 env bempty in	   
 	  let (q4, sigma2) =
 	    let env =
 	      (hd.data, ty (Ty.variable listType))
 	      :: (tl.data, ty (Ty.constructor "List" [Ty.variable listType]))
 	      :: env
 	    in
-	    infer prim q3 env bnempty
+	    infer q3 env bnempty
 	  in
 
 	  let beta1 = Var.fresh () in
@@ -351,7 +412,7 @@ struct
         let q1 =
 	  List.fold_left (
 	    fun q1 expr ->
-	      let (q2, sigma) = infer prim q1 env expr in
+	      let (q2, sigma) = infer q1 env expr in
 	      let v = Var.fresh () in
 	      try
 	        unify ((v, (BFlexible, sigma)) :: q2)

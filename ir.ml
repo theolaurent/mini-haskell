@@ -54,7 +54,7 @@ type ir =
   | ApplyCons
   | ApplyUncons (* push hd ; push tl *)
 		 
-type free_vars_ast = var list gen_ast
+type free_vars_expr = var list gen_expr
 
 (* TODO : don't use lists for sequences ! *)
 
@@ -68,7 +68,7 @@ let index l x =
   | h :: t -> if h = x then i else loop t (i + 1)
   in loop l 0
 
-let calc_free_vars_ast ast(*:typed_ast*) : free_vars_ast = (* TODO : the transformation from lists to set has become usefull ! *)
+let calc_free_vars_ast ast(*:typed_ast*) : free_vars_expr = (* TODO : the transformation from lists to set has become usefull ! *)
   let f set _ = VarSet.fold (fun x res -> x :: res) set []
   in gen_traversal f (annot_free_vars ast)
 
@@ -112,13 +112,62 @@ let const_to_ir c =
   | CBool b -> [ Value (Imm (if b then 1 else 0)) ]
   | CInt i -> [ Value (Imm i) ]
   | CChar c -> [ Value (Imm (int_of_char c)) ]
-  | CPrim "empty" -> [ Value (Imm 0) ]
+  | CEmpty -> [ Value (Imm 0) ]
         (* be carefull with partial applications *)
        (* do not forget to force *)
        (* TODO : change primitives from string to a variant type in the whole compiler ; *)
-  | CPrim _ -> (Printf.printf "Unexpected primtive value" ; exit 2)
-      
-let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match ast.data with
+(*  | CPrim _ -> (Printf.printf "Unexpected primtive value" ; exit 2) *)
+
+let arithmetic_to_ir a =
+  match a with
+  | Add -> [BinPrim "add"]
+  | Sub -> [BinPrim "sub"]
+  | Mul -> [BinPrim "mul"]	     
+
+let comparison_to_ir c =
+  match c with
+  | LessThan     -> [BinPrim "lt"]
+  | LessEqual    -> [BinPrim "leq"]
+  | GreaterThan  -> [BinPrim "gt"]	     
+  | GreaterEqual -> [BinPrim "geq"]
+  | Equal        -> [BinPrim "eq"]
+  | NotEqual     -> [BinPrim "neq"]
+
+let logical_branch lcont conn =
+  match conn with
+  | And -> [BranchFalse lcont]
+  | Or  -> [BranchTrue  lcont]
+	     
+let rec binop_to_ir (env : variable VarMap.t) locals (b, e1, e2) =
+  match b with
+  | Arithmetic a ->
+     expr_to_ir env locals e1
+     @ [ Force ; Push ]
+     @ expr_to_ir env (locals + 1) e2
+     @ [ Force ]
+     @ arithmetic_to_ir a
+  | Comparison c ->
+     expr_to_ir env locals e1
+     @ [ Force ; Push ]
+     @ expr_to_ir env (locals + 1) e2
+     @ [ Force ]
+     @ comparison_to_ir c
+  | Logical conn ->
+     let lcont = next_label () in
+     (expr_to_ir env locals e1)
+     @ [ Force ]
+     @ logical_branch lcont conn
+     @ (expr_to_ir env locals e2)
+     @ [ Label lcont ]
+  | Ast.Cons ->
+     (froze env e1)
+     @ [ Push ] (* push *)
+     @ (froze env e2)
+     @ [ Push ; Alloc (ACons) ; Value (Cons) ] 
+ 
+
+     
+and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) = match ast.data with
   | Const c ->
      begin
        [ Alloc (AImm) ] @ (const_to_ir c)
@@ -138,29 +187,6 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
      [ Branch lcont ; Label lfunc ; StartCall ]
      @ (expr_to_ir new_env 0 body)
      @ [ ReturnCall ; Label lcont ; Alloc (AClos (List.length clos_env)) ; Value (Clos (lfunc, clos_env)) ]
-  | App ({ data = App ({ data = Const (CPrim "and") ; _ }, e1) ; _ }, e2) ->
-     let lcont = next_label () in
-     (expr_to_ir env locals e1)
-     @ [ Force ; BranchFalse lcont ]
-     @ (expr_to_ir env locals e2)
-     @ [ Label lcont ]
-  | App ({ data = App ({ data = Const (CPrim "or") ; _ }, e1) ; _ }, e2) ->
-     let lcont = next_label () in
-     (expr_to_ir env locals e1)
-     @ [ Force ; BranchTrue lcont ]
-     @ (expr_to_ir env locals e2)
-     @ [ Label lcont ]
-  | App ({ data = App ({ data = Const (CPrim "cons") ; _ }, e1) ; _ }, e2) ->
-     (froze env e1)
-     @ [ Push ] (* push *)
-     @ (froze env e2)
-     @ [ Push ; Alloc (ACons) ; Value (Cons) ] 
-  | App ({ data = App ({ data = Const (CPrim s) ; _ }, e1) ; _ }, e2) ->
-     (expr_to_ir env locals e1)
-     @ [ Force ; Push ]
-     @ (expr_to_ir env (locals + 1) e2)
-     @ [ Force ]
-     @ [BinPrim s]
   | App (f, e) ->
      (froze env e)
      @ [ Push ]
@@ -207,6 +233,9 @@ let rec expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_ast) = match 
 		       List.fold_left (fun ir expr -> ir @ expr_to_ir env locals expr) [] l
                     | Return -> [Alloc (AImm) ; Value (Imm 0)]
               end
+  | Binop (bop, e1, e2) ->
+     binop_to_ir env locals (bop, e1, e2)
+
 and alloc_frozen env e =
   match e.data with
   | Const _ ->

@@ -160,9 +160,9 @@ module StringMap = Map.Make(String)
 						  
 let binary_primtives =
   StringMap.empty
-  |> StringMap.add "plus"  (fun d r1 r2 -> add d r1 oreg r2)
-  |> StringMap.add "minus" (fun d r1 r2 -> sub d r1 oreg r2)
-  |> StringMap.add "mult"  (fun d r1 r2 -> mul d r1 oreg r2)
+  |> StringMap.add "add"  (fun d r1 r2 -> add d r1 oreg r2)
+  |> StringMap.add "sub" (fun d r1 r2 -> sub d r1 oreg r2)
+  |> StringMap.add "mul"  (fun d r1 r2 -> mul d r1 oreg r2)
   |> StringMap.add "lt"    (slt)
   |> StringMap.add "gt"    (sgt)
   |> StringMap.add "leq"   (sle)
