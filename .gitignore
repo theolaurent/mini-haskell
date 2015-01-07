@@ -7,3 +7,10 @@
 *.cmx
 *.cmxs
 *.cmxa
+*.s
+*.out0
+*.out1
+*.byte
+*.native
+_build
+petitghc
