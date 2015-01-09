@@ -8,7 +8,7 @@ test_good() {
 	else echo "Good test fail: $f" ;
 	fi
     done
-    
+
 }
 test_bad() {
     for f in $@ ;
@@ -34,6 +34,14 @@ compile_and_exec() {
     diff -q $outfile $outfile1
 }
 
+compile_and_exec_fail() {
+    file=$1
+    execfile=${file/%.hs/.s}
+    ./petitghc $file ;
+     spim -ldata 2000000 -f $execfile > /dev/null;
+     [ $? = 1 ]
+}
+
 case $1 in
     syntax)
 	command="${command} --parse-only" ;
@@ -45,12 +53,12 @@ case $1 in
 	test_bad tests/typing/bad/*.hs ;;
     execution)
 	command="compile_and_exec" ;
-	test_good tests/exec/*.hs ;;
-	#	test_good tests/exec*/*.hs ;
+	test_good tests/exec/*.hs ;
+	command="compile_and_exec_fail" ;
+	test_good tests/exec-fail/*.hs ;;
+    #	test_good tests/exec*/*.hs ;
 	#	test_bad tests/typing/bad/*.hs ;;
     *)
 	echo "Unknown command '$1' : avalaible options are (syntax | typing | execution)"
-	  
-esac 
-       
-	
+
+esac
