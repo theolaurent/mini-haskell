@@ -21,7 +21,7 @@ type comparison_binop =
 type logical_binop =
   | And
   | Or
-	   
+
 type binop =
   | Arithmetic of arithmetic_binop
   | Comparison of comparison_binop
@@ -31,7 +31,7 @@ type binop =
 type ('a, 'b) annot = { annot : 'a ; data : 'b }
 
 type 'a annoted_var = ('a, var) annot
-				
+
 
 type 'a gen_expr = ('a, 'a gen_expr_s) annot
 and 'a gen_expr_s =
@@ -65,9 +65,9 @@ let annotate pos ?ty expr =
     | None -> `Unty
     | Some t -> `Annot t
   in { annot = (pos, t) ; data = expr }
-       
+
 module Primitive = Map.Make(String);;
-  
+
 
  (* A gereric way to apply function to an annotated expr *)
 let gen_traversal (f_expr:'a -> 'b gen_expr_s -> 'b) (expr:'a gen_expr) : 'b gen_expr =
@@ -113,7 +113,7 @@ let annot_free_vars expr =
                                       (VarSet.remove vh.data (VarSet.remove vt.data conscase.annot))
                       | Do le -> List.fold_left (fun res e -> VarSet.union res e.annot) VarSet.empty le
                       | Return -> VarSet.empty
-		      
+
                 end
     | Binop (_, x, y) -> VarSet.union x.annot y.annot
   in gen_traversal f expr

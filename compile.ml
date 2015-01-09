@@ -55,7 +55,7 @@ let force =
 
 let exit_code code =
   li a0 code
-  ++ li v0 10
+  ++ li v0 17
   ++ syscall
 
 let error =
@@ -68,7 +68,7 @@ let error =
   ++ j "end_loop_error"
   ++ label "start_loop_error"
   ++ lw v0 areg (4, a1)
-  ++ jal "force"	 
+  ++ jal "force"
   ++ lw a0 areg (4, v0) ++ comment "load the head"
   ++ li v0 11
   ++ syscall            ++ comment "print char"
@@ -81,7 +81,7 @@ let error =
   ++ beq t0 t1 "start_loop_error"
   ++ exit_code 1
 
-	    
+
 let putChar =
   comment "putChar primitive"
   ++ lw a0 areg (4, a0)
@@ -106,7 +106,7 @@ let remC d r1 r2 =
   ++ label "remC"
   ++ rem d r1 oreg r2
 
-	 
+
 let error_msg =
   label "error_msg"
   ++ asciiz "error : "
@@ -156,21 +156,18 @@ let allocate size =
 
 
 
-module StringMap = Map.Make(String)
-						  
-let binary_primtives =
-  StringMap.empty
-  |> StringMap.add "add"  (fun d r1 r2 -> add d r1 oreg r2)
-  |> StringMap.add "sub" (fun d r1 r2 -> sub d r1 oreg r2)
-  |> StringMap.add "mul"  (fun d r1 r2 -> mul d r1 oreg r2)
-  |> StringMap.add "lt"    (slt)
-  |> StringMap.add "gt"    (sgt)
-  |> StringMap.add "leq"   (sle)
-  |> StringMap.add "geq"   (sge)
-  |> StringMap.add "eq"    (seq)
-  |> StringMap.add "neq"   (sne)
-  |> StringMap.add "rem"   (remC)
-  |> StringMap.add "div"   (divC)
+let binary_primtives p = match p with
+  | `add -> (fun d r1 r2 -> add d r1 oreg r2)
+  | `sub -> (fun d r1 r2 -> sub d r1 oreg r2)
+  | `mul -> (fun d r1 r2 -> mul d r1 oreg r2)
+  | `lt  -> (slt)
+  | `gt  -> (sgt)
+  | `leq -> (sle)
+  | `geq -> (sge)
+  | `eq  -> (seq)
+  | `neq -> (sne)
+  | `rem -> (remC)
+  | `div -> (divC)
 
 let compile_alloc a = match a with
   | AImm ->
@@ -189,7 +186,7 @@ let compile_alloc a = match a with
      allocate 8                       ++ comment "space for tag + closure"
      ++ li t0 Tag.frozen              ++ comment "tag for frozen blocks"
      ++ sw t0 areg (0, v0)            ++ comment "store the tag"
-    
+
 let rec compile_store_value v = match v with
   | Imm i ->
      sw t0 areg (0, v0) ++ comment "store the tag"
@@ -211,7 +208,7 @@ let rec compile_store_value v = match v with
      ++ move t0 v0
      ++ pop v0
      ++ sw t0 areg (4, v0)             ++ comment "store the closure"
-						  
+
 let compile_instr ir = match ir with
   | Force ->
      jal "force"
@@ -248,10 +245,10 @@ let compile_instr ir = match ir with
       pop s1
      ++ pop s0
      ++ pop ra
-     ++ pop fp 
+     ++ pop fp
      ++ jr ra
   | ReturnForce -> nop (* No need to do anything *)
-  (* To implement once we decided environment representation *)		     
+  (* To implement once we decided environment representation *)
   | Push -> push v0
   | Pop n -> popn (4 * n)
   | Fetch v -> read_variable v0 v
@@ -260,7 +257,7 @@ let compile_instr ir = match ir with
      pop a0
      ++ lw a0 areg (4, a0)
      ++ lw v0 areg (4, v0)
-     ++ (StringMap.find s binary_primtives) t0 a0 v0
+     ++ binary_primtives s t0 a0 v0
      ++ allocate 8
      ++ sw t0 areg (4, v0)
      ++ li t0 Tag.int
@@ -269,11 +266,10 @@ let compile_instr ir = match ir with
      begin
        move a0 v0 ++
        match s with
-       | "error" -> error
-       | "putChar" -> putChar
+       | `error -> error
+       | `putChar -> putChar
 		      ++ compile_alloc AImm
 		      ++ compile_store_value (Imm 0)
-       | _ -> Utils.exhaust_pattern ()
      end
   | ApplyCons ->
      comment "Apply cons"
@@ -290,4 +286,3 @@ let compile_instr ir = match ir with
      ++ push t0
      ++ lw t0 areg (8, v0)
      ++ push t0
- 

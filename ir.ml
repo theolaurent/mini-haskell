@@ -15,14 +15,14 @@ type variable =
 
 
 module VarMap = Map.Make (struct type t = var let compare = compare end)
-		       
+
 
 type alloc =
   | AImm
   | ACons
   | AClos of int (* env length *)
   | AFroz
-			 
+
 type label = L of int
 type env = value list
 and value =
@@ -49,11 +49,16 @@ type ir =
   (* is it really usefull ? there will always be a Return after that (?) *)
   | Fetch of variable
   | Store of variable (* change the content of a variable to the current value ; will be usefull for recursive definitions, cf let bindings *)
-  | UnPrim of string
-  | BinPrim of string
+  | UnPrim of unprim
+  | BinPrim of binprim
   | ApplyCons
   | ApplyUncons (* push hd ; push tl *)
-		 
+and unprim = [ `error | `putChar ]
+and binprim = [ `div | `rem | `add | `sub | `mul | `lt
+              | `leq | `gt | `geq | `eq | `neq ]
+
+
+
 type free_vars_expr = var list gen_expr
 
 (* TODO : don't use lists for sequences ! *)
@@ -92,20 +97,20 @@ let clos_of_unop un =
     Label cont ; Alloc (AClos 0) ; Value (Clos (func, [])) ]
 
 let primitives =
-  clos_of_binop "div" @ [Store (GlobalVar "div")]
-  @ clos_of_binop "rem" @ [Store (GlobalVar "rem")]
-  @ clos_of_unop "error" @ [Store (GlobalVar "error")]
-  @ clos_of_unop "putChar" @ [Store (GlobalVar "putChar")] 
-		      
+  clos_of_binop `div @ [Store (GlobalVar "div")]
+  @ clos_of_binop `rem @ [Store (GlobalVar "rem")]
+  @ clos_of_unop `error @ [Store (GlobalVar "error")]
+  @ clos_of_unop `putChar @ [Store (GlobalVar "putChar")]
+
 
 let filter_out_globals env free_vars =
   List.filter (fun s -> VarMap.mem s env) free_vars
-			       
+
 let closure_env _ free_vars =
   List.fold_left (fun (e, i) s -> (VarMap.add s (ClosureVar i) e, succ i))
 		 (VarMap.empty, 0) free_vars
   |> fst
-		   
+
 let const_to_ir c =
   match c with
   | CUnit -> [ Value (Imm 0) ]
@@ -120,24 +125,24 @@ let const_to_ir c =
 
 let arithmetic_to_ir a =
   match a with
-  | Add -> [BinPrim "add"]
-  | Sub -> [BinPrim "sub"]
-  | Mul -> [BinPrim "mul"]	     
+  | Add -> [BinPrim `add]
+  | Sub -> [BinPrim `sub]
+  | Mul -> [BinPrim `mul]
 
 let comparison_to_ir c =
   match c with
-  | LessThan     -> [BinPrim "lt"]
-  | LessEqual    -> [BinPrim "leq"]
-  | GreaterThan  -> [BinPrim "gt"]	     
-  | GreaterEqual -> [BinPrim "geq"]
-  | Equal        -> [BinPrim "eq"]
-  | NotEqual     -> [BinPrim "neq"]
+  | LessThan     -> [BinPrim `lt]
+  | LessEqual    -> [BinPrim `leq]
+  | GreaterThan  -> [BinPrim `gt]
+  | GreaterEqual -> [BinPrim `geq]
+  | Equal        -> [BinPrim `eq]
+  | NotEqual     -> [BinPrim `neq]
 
 let logical_branch lcont conn =
   match conn with
   | And -> [BranchFalse lcont]
   | Or  -> [BranchTrue  lcont]
-	     
+
 let rec binop_to_ir (env : variable VarMap.t) locals (b, e1, e2) =
   match b with
   | Arithmetic a ->
@@ -163,10 +168,10 @@ let rec binop_to_ir (env : variable VarMap.t) locals (b, e1, e2) =
      (froze env e1)
      @ [ Push ] (* push *)
      @ (froze env e2)
-     @ [ Push ; Alloc (ACons) ; Value (Cons) ] 
- 
+     @ [ Push ; Alloc (ACons) ; Value (Cons) ]
 
-     
+
+
 and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) = match ast.data with
   | Const c ->
      begin
@@ -216,7 +221,7 @@ and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) = match ast
                        @ [ Branch lcont ; Label lfalse ]
                        @ (expr_to_ir env locals onfalse)
                        @ [ Label lcont ]
-                    | Case (l, bempty, hd, tl, bnempty) -> 
+                    | Case (l, bempty, hd, tl, bnempty) ->
 		       let lempty = next_label () in
 		       let lcont = next_label () in
 		       (expr_to_ir env locals l)
@@ -228,7 +233,7 @@ and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) = match ast
 			   in expr_to_ir env (locals + 2) bnempty )
 		       @ [ Pop 2 ; Branch lcont ; Label lempty ]
 		       @ (expr_to_ir env locals bempty)
-		       @ [ Label lcont ]					  
+		       @ [ Label lcont ]
 		    | Do l  ->
 		       List.fold_left (fun ir expr -> ir @ expr_to_ir env locals expr) [] l
                     | Return -> [Alloc (AImm) ; Value (Imm 0)]
@@ -244,7 +249,7 @@ and alloc_frozen env e =
      let l = List.length @@ filter_out_globals env e.annot in
      [Alloc (AClos l)]
   | _ ->
-     [Alloc (AFroz)]	 
+     [Alloc (AFroz)]
 and store_frozen env e =
   match e.data with
   | Const c ->
