@@ -45,7 +45,8 @@ and 'a gen_expr_s =
 
 and 'a spec =
   | If of 'a gen_expr * 'a gen_expr * 'a gen_expr
-  | Case of 'a gen_expr * 'a gen_expr * 'a annoted_var * 'a annoted_var * 'a gen_expr
+  | Case of 'a gen_expr * 'a gen_expr
+	    * 'a annoted_var * 'a annoted_var * 'a gen_expr
   | Do of 'a gen_expr list
   | Return
 and 'a gen_def = 'a annoted_var * 'a gen_expr
@@ -66,7 +67,6 @@ let annotate pos ?ty expr =
     | Some t -> `Annot t
   in { annot = (pos, t) ; data = expr }
 
-module Primitive = Map.Make(String);;
 
 
  (* A gereric way to apply function to an annotated expr *)
@@ -120,14 +120,9 @@ let annot_free_vars expr =
 
 
 
-(* TODO : make a diffenrece between the position of the primitive keyword
-   and the positions of the whole primitive application *)
 let binop op pos x y : expr =
   annotate pos (Binop (op, x, y))
-(* List.fold_left (fun res expr ->
- annotate pos (App (res, expr)))
- (annotate pos (Const (CPrim str))) l
- *)
+
 let expr_empty pos = annotate pos (Const CEmpty)
 let expr_cons  = binop Cons
 let expr_or    = binop (Logical Or)
@@ -147,13 +142,13 @@ let expr_list pos l =
   List.fold_right (expr_cons pos) l (expr_empty pos)
 
 let expr_let pos l expr =
-  (* List.fold_right (fun (x,y) e -> Let (x,y, e)) l expr *)
   annotate pos (Let (l, expr))
 
 let expr_lambda pos l expr =
   List.fold_right (fun i res -> annotate pos (Abstr (i, res))) l expr
 
-let expr_app pos f l = List.fold_left (fun res expr -> annotate pos (App (res, expr))) f l
+let expr_app pos f l =
+  List.fold_left (fun res expr -> annotate pos (App (res, expr))) f l
 
 
 let expr_if pos cond btrue bfalse =
