@@ -1,7 +1,7 @@
 open Ast
 open Typer
-open Schema
 open Unification
+open Definitions
 
 module IdentSet = Set.Make(String)
 module IdentMap = Set.Make(String)
@@ -16,7 +16,7 @@ module G =
     end)
 module Components = Graph.Components.Make(G)
 
-type env = (Var.t * schema) list
+type env = (Var.t * Schema.schema) list
 
 let set_of_list l =
   List.fold_left (fun e var -> Var.Set.add var e) Var.Set.empty l
@@ -39,7 +39,7 @@ let invalid_binop expr =
   Format.fprintf (Format.str_formatter) "While type %a"
 		 Printer.print_ast expr ;
   Format.flush_str_formatter ()
-			     
+
 let invalid_mutually_recursive_definition defs =
   let def =
     List.fold_left (fun s (d, _) -> s ^ ", " ^ d.data)
@@ -65,20 +65,20 @@ let invalid_instruction instr =
     Printer.print_ast instr ;
   Format.flush_str_formatter ()
 
-let infer_const = function
-  | CUnit -> ty (Ty.constructor "()" [])
-  | CChar _ -> ty (Ty.constructor "Char" [])
-  | CInt _  -> ty (Ty.constructor "Integer" [])
-  | CBool _ -> ty (Ty.constructor "Bool" [])
+let infer_const c =
+  match c with
+  | CUnit -> ty !!"()"
+  | CChar _ -> ty !!"Char"
+  | CInt _  -> ty !!"Integer"
+  | CBool _ -> ty !!"Bool"
   | CEmpty ->
      let v = Var.fresh () in
-     forall (v, (BFlexible, bot)) (ty (Ty.constructor "List" [Ty.variable v]))
-(*  | Cname -> Primitive.find name *)
+     forall ??v (ty @@ list (var v))
 
-				 
+
 let universal_type q =
   let var = Var.fresh () in
-  ((var, (BFlexible, bot)) :: q, ty (Ty.variable var))
+  ((var, (Schema.BFlexible, Schema.bot)) :: q, Schema.ty (Ty.variable var))
 
 
 module Make(Err:Errors.S) =
@@ -96,8 +96,7 @@ struct
     | Logical    _ -> Definitions.logical
     | Cons         -> Definitions.cons
 
-
-  (* type inference *) 
+  (* type inference *)
   let rec infer q env expr =
     let (Pos (spos, epos), annot) = expr.annot in
     let (q, sch) =
@@ -110,34 +109,36 @@ struct
           with Not_found ->
 	    error [variable_not_found x] spos epos ;
 	    universal_type q
-        end 
+        end
       | Abstr (x, a) -> begin
         match snd x.annot with
         | `Unty ->
           let alpha = Var.fresh () in
-          let q1 = (alpha, (BFlexible, bot)) :: q in
+          let q1 = ??alpha :: q in
           let (q2, sigma) =
-	    infer q1 ((x.data ,ty (Ty.variable alpha)) :: env) a
+	    infer q1 ((x.data, ty (var alpha)) :: env) a
           in
           let beta = Var.fresh () in
-          let (q3, q4) = split q2 (set_of_list (fst (List.split q))) in
-          (q3,
-           forall_map q4
-	     (forall (beta, (BFlexible, sigma))    
-	 (ty  (Ty.arrow (Ty.variable alpha) (Ty.variable beta)))))
+          let (q3, q4) = Schema.split q2 (set_of_list (fst (List.split q))) in
+	  (q3,
+	   forall_map q4
+	   @@ forall (beta >=? sigma)
+	   @@ ty @@ var alpha @-> var beta
+	  )
         | `Annot s ->
           let alpha = Var.fresh () in
           let (q1, sigma) =
 	    infer q ((x.data, s) :: env) a
           in
-          let q2 = (alpha, (BRigid, s)) :: q1 in
+          let q2 = (alpha =? s) :: q1 in
           let beta = Var.fresh () in
-          let (q3, q4) = split q2 (set_of_list (fst (List.split q))) in
+          let (q3, q4) = Schema.split q2 (set_of_list (fst (List.split q))) in
           (q3,
            forall_map q4
-	     (forall (beta, (BFlexible, sigma))    
-	 (ty  (Ty.arrow (Ty.variable alpha) (Ty.variable beta)))))
-         
+	   @@ forall (beta >=? sigma)
+	   @@ ty @@  var alpha @-> var beta
+	  )
+
         end
       | App (a, b) ->
         begin
@@ -148,19 +149,19 @@ struct
 	  let beta = Var.fresh () in
 	  try
 	    let q3 =
-	      unify ((beta, (BFlexible, bot))
-		     :: (alpha_b, (BFlexible, sigma_b))
- 		     :: (alpha_a, (BFlexible, sigma_a))
+	      unify (??beta
+		     :: (alpha_b >=? sigma_b)
+ 		     :: (alpha_a >=? sigma_a)
 		     :: q2)
-	        (Ty.variable alpha_a)
-	        (Ty.arrow (Ty.variable alpha_b) (Ty.variable beta))
+	        (var alpha_a)
+	        (var alpha_b @-> var beta)
 	    in
-	    let (q4, q5) = split q3 (set_of_list (fst (List.split q))) in
-	    (q4, forall_map q5 (ty (Ty.variable beta)))
+	    let (q4, q5) = Schema.split q3 (set_of_list (fst (List.split q))) in
+	    (q4, forall_map q5 @@ ty @@ var beta)
 	  with Unification.Failure trace ->
 	    error (invalid_application a b :: trace) spos epos ;
 	    universal_type q
-        end 
+        end
       | Let (l, expr) ->
         let (q1, defs) =
 	  infer_potentially_mutually_recursive_definitions q env l spos epos
@@ -179,17 +180,16 @@ struct
 	   let beta = Var.fresh () in
 	   try
 	     let q3 =
-	       unify ((beta, (BFlexible, bot))
-		      :: (alpha_y, (BFlexible, schema_y))
-		      :: (alpha_x, (BFlexible, schema_x))
-		      :: (alpha_op, (BFlexible, schema_op))
+	       unify (??beta
+		      :: (alpha_y >=? schema_y)
+		      :: (alpha_x >=? schema_x)
+		      :: (alpha_op >=? schema_op)
 		      :: q2)
-		     (Ty.variable alpha_op)
-		     (Ty.arrow (Ty.variable alpha_x)
-			       (Ty.arrow (Ty.variable alpha_y) (Ty.variable beta)))
+		     (var alpha_op)
+		     (var alpha_x @-> var alpha_y @-> var beta)
 	     in
-	     let (q4, q5) = split q3 (set_of_list (fst (List.split q))) in
-	     (q4, forall_map q5 (ty (Ty.variable beta)))
+	     let (q4, q5) = Schema.split q3 (set_of_list (fst (List.split q))) in
+	     (q4, forall_map q5 @@ ty @@ var beta)
 	   with Unification.Failure trace ->
 	     error (invalid_binop expr :: trace) spos epos ;
 	     universal_type q
@@ -201,15 +201,15 @@ struct
       let alpha = Var.fresh () in
       let beta = Var.fresh () in
       let q' =
-	unify ((beta, (BFlexible, sch)) :: (alpha, (BRigid, s)) :: q) (Ty.variable alpha) (Ty.variable beta) in
-      (q', s)
-      (*      (ignore  polyunify q sch s ; (q, s)) *)
-    
-    and infer_potentially_mutually_recursive_definitions q env l spos epos =     
-      let rec add_edges_from bound x expr (env, g) =
-        match expr.data with
-        | Const _ -> (env, g)
-        | Var y ->
+	unify ((beta >=? sch) :: (alpha =? s) :: q)
+	      (var alpha) (var beta)
+      in (q', s)
+
+  and infer_potentially_mutually_recursive_definitions q env l spos epos =
+    let rec add_edges_from bound x expr (env, g) =
+      match expr.data with
+      | Const _ -> (env, g)
+      | Var y ->
 	   if IdentSet.mem y bound
 	   then (env, g)
 	   else if List.exists (fun (z, _) -> z.data = y) l
@@ -222,7 +222,7 @@ struct
 	       let msg = "Unbound identifier " ^ y in
 	       Err.report msg spos epos ;
 	       let v = Var.fresh () in
-	       ((y, (forall (v, (BFlexible, bot)) (ty (Ty.variable v)))) :: env, g)
+	       ((y, forall ??v @@ ty @@ var v) :: env, g)
 	     end
         | Abstr (y, a) ->
 	  add_edges_from (IdentSet.add y.data bound) x a (env, g)
@@ -284,7 +284,7 @@ struct
 	     let (q, nv) =
 	       infer_mutually_recursive_definitions q (vars @ env) l spos epos
 	     in
-	     (q, nv @ vars)) (q, []) ls	
+	     (q, nv @ vars)) (q, []) ls
       end
 
     and infer_mutually_recursive_definitions q env l spos epos =
@@ -293,10 +293,10 @@ struct
         let q1 = List.fold_left (fun q1 (x, a) ->
             let sch =
               match snd x.annot with
-              | `Unty -> bot
+              | `Unty -> Schema.bot
               | `Annot sch -> sch
             in
-            (a, (BFlexible, sch)) :: q1) q defVar
+            (a >=? sch) :: q1) q defVar
         in
         let nEnv =
 	  List.fold_left (fun nEnv (x, a) -> (x.data, ty (Ty.variable a)) :: nEnv) env defVar
@@ -309,24 +309,28 @@ struct
         in
 
         let bodyVar =
-	  List.map (fun sigma -> (normal_form sigma.value, Var.fresh ())) sigmaList
+	  List.map
+	    (fun sigma -> (Schema.normal_form sigma.Schema.value, Var.fresh ()))
+	    sigmaList
         in
         let q3 =
-	  List.fold_left (fun q3 (sigma, beta) -> (beta, (BFlexible, sigma)) :: q3) q2 bodyVar
+	  List.fold_left (fun q3 (sigma, beta) -> (beta >=? sigma) :: q3) q2 bodyVar
         in
         let q4 =
 	  List.fold_left2 (fun q4 (_,alpha) (_, beta) ->
-	      unify q4 (Ty.variable alpha) (Ty.variable beta)
+	      unify q4 (var alpha) (var beta)
 	    ) q3  defVar bodyVar
         in
-        let (q5, q6) = split q4 (set_of_list (fst (List.split q))) in
-        (q5, (List.map (fun (x,alpha) -> (x.data, forall_map q6 (ty (Ty.variable alpha)))) defVar))
+        let (q5, q6) = Schema.split q4 (set_of_list (fst (List.split q))) in
+        (q5,
+	 List.map (fun (x,alpha) ->
+		   (x.data, forall_map q6 @@ ty @@ var alpha)) defVar)
       with Unification.Failure trace ->
         error (invalid_mutually_recursive_definition l :: trace) spos epos;
         let defVar = List.map
 	    (fun (x, _) ->
 	       let v = Var.fresh () in
-	       (x.data, forall (v, (BFlexible, bot)) (ty (Ty.variable v)))) l
+	       (x.data, forall ??v @@ ty @@ var v)) l
         in
         (q, defVar)
 
@@ -337,9 +341,8 @@ struct
           let alpha = Var.fresh () in
           let q2 =
             try
-	      unify ((alpha, (BFlexible, sigmaCond)) :: q1)
-	        (Ty.variable alpha)
-	        (Ty.constructor "Bool" [])
+	      unify ((alpha >=? sigmaCond) :: q1)
+	            (var alpha) !!"Bool"
 	    with Unification.Failure trace ->
 	      error (invalid_condition cond :: trace) spos epos ;
 	      q
@@ -350,42 +353,42 @@ struct
 	  let beta1 = Var.fresh () in
 	  let beta2 = Var.fresh () in
 
-	  try   
+	  try
 	    let q5 =
-	      unify ((beta2, (BFlexible, sigma2))
-		     :: (beta1, (BFlexible, sigma1))
+	      unify ((beta2 >=? sigma2)
+		     :: (beta1 >=? sigma1)
 		     :: q4)
-	        (Ty.variable beta1)
-	        (Ty.variable beta2)
+	        (var beta1)
+	        (var beta2)
 	    in
-	    let (q6, q7) = split q5 (set_of_list (fst (List.split q))) in
-	    (q6, forall_map q7 (ty (Ty.variable beta1)))
+	    let (q6, q7) = Schema.split q5 (set_of_list (fst (List.split q))) in
+	    (q6, forall_map q7 @@ ty @@ var beta1)
 	  with Unification.Failure trace ->
 	    error (invalid_branches b1 b2 :: trace) spos epos ;
 	    universal_type q
         end
-      | Case (list, bempty, hd, tl, bnempty) ->
+      | Case (l, bempty, hd, tl, bnempty) ->
         begin
 	  let listType = Var.fresh () in
-	  let (q1, sigmaList) = infer q env list in
+	  let (q1, sigmaList) = infer q env l in
 	  let alpha = Var.fresh () in
 	  let q2 =
 	    try
-	      unify ((alpha, (BFlexible, sigmaList))
-		     :: (listType, (BFlexible, bot))
+	      unify ((alpha >=? sigmaList)
+		     :: ??listType
 		     :: q1)
-	        (Ty.variable alpha)
-	        (Ty.constructor "List" [Ty.variable listType])
+	        (var alpha)
+	        (list @@ var listType)
 	    with Unification.Failure trace ->
-	      error (invalid_condition list :: trace) spos epos ;
-	      (listType, (BFlexible, bot)) :: q
+	      error (invalid_condition l :: trace) spos epos ;
+	      ??listType :: q
 	  in
 
-	  let (q3, sigma1) = infer q2 env bempty in	   
+	  let (q3, sigma1) = infer q2 env bempty in
 	  let (q4, sigma2) =
 	    let env =
-	      (hd.data, ty (Ty.variable listType))
-	      :: (tl.data, ty (Ty.constructor "List" [Ty.variable listType]))
+	      (hd.data, ty @@ var listType)
+	      :: (tl.data, ty @@ list @@ var listType)
 	      :: env
 	    in
 	    infer q3 env bnempty
@@ -394,37 +397,37 @@ struct
 	  let beta1 = Var.fresh () in
 	  let beta2 = Var.fresh () in
 
-	  try   
+	  try
 	    let q5 =
-	      unify ((beta2, (BFlexible, sigma2))
-		     :: (beta1, (BFlexible, sigma1))
+	      unify ((beta2 >=? sigma2)
+		     :: (beta1 >=? sigma1)
 		     :: q4)
-	        (Ty.variable beta1)
-	        (Ty.variable beta2)
+	        (var beta1)
+	        (var beta2)
 	    in
-	    let (q6, q7) = split q5 (set_of_list (fst (List.split q))) in
-	    (q6, forall_map q7 (ty (Ty.variable beta1)))
+	    let (q6, q7) = Schema.split q5 (set_of_list (fst (List.split q))) in
+	    (q6, forall_map q7 @@ ty @@ var beta1)
 	  with Unification.Failure trace ->
 	    error (invalid_branches bempty bnempty :: trace) spos epos ;
 	    universal_type q
         end
-      | Do (instrs) ->
-        let q1 =
-	  List.fold_left (
+      | Do instrs ->
+         let q1 =
+	   List.fold_left (
 	    fun q1 expr ->
-	      let (q2, sigma) = infer q1 env expr in
-	      let v = Var.fresh () in
-	      try
-	        unify ((v, (BFlexible, sigma)) :: q2)
-		  (Ty.variable v)
-		  (Ty.constructor "IO" [Ty.constructor "()" []])
-	      with Unification.Failure trace ->
-	        let (Pos (spos, epos), _) = expr.annot in
-	        error (invalid_instruction expr :: trace) spos epos ;
-	        q2
-	  ) q instrs
-        in
-        (q1, ty (Ty.constructor "IO" [Ty.constructor "()" []]))
+	    let (q2, sigma) = infer q1 env expr in
+	    let v = Var.fresh () in
+	    try
+	      unify ((v >=? sigma) :: q2)
+		  (var v)
+		  (io !!"()")
+	    with Unification.Failure trace ->
+	      let (Pos (spos, epos), _) = expr.annot in
+	      error (invalid_instruction expr :: trace) spos epos ;
+	      q2
+	     ) q instrs
+         in
+         (q1, ty @@ io !!"()")
       | Return ->
-        (q, ty (Ty.constructor "IO" [Ty.constructor "()" []]))
+         (q, ty @@ io !!"()")
 end
