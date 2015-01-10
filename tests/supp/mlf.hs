@@ -1,13 +1,14 @@
 
 id x = x
-t a b = b + error a
 
-fix x = let y = (x :: a => a) in y y
-fix2 (x :: a => a) = x x
---fix2 (x :: b, a >= (Char -> b) => a) = if True then (\u v -> u + v) else x
---fixid = (fix id)
---fixidid = fixid id
---a = (0 :: a => a)
+fix x = let y = (x :: a => a -> a) in y y
+fix2 (x :: a => a -> a) = x x
+
+fixid = fix id
+fixidid = fixid id
+
+fix2id = fix2 id
+
 main = do {
    return ()
 }
