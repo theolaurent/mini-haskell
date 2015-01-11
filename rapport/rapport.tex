@@ -10,7 +10,11 @@
 
 \author{Jun \textsc{Maillard} et Théo \textsc{Laurent}}
 
+
+\def\mlf{$ML^F$}
+
 \begin{document}
+
 
 \maketitle
 
@@ -38,8 +42,8 @@ Le lexeur et le parseur sont générés à l'aide des outils ocamllex et menhir,
 L'arbre syntaxique produit est un type riche : on distingue notamment les opérations binaires primitives (arithmétiques, logique, de comparaison et cons) des autre variables. Par contre les primitives \PVerb{div}, \PVerb{rem}, \PVerb{putChar} et \PVerb{error} sont traités comme n'importequ'elle variable.
 
 \subsection{Typage}
-Pour le typage, un système de type \og à la MLF \fg ~a été implémenté
-(cf. section "Extension : MLF"). % TODO : utiliser les references Latex
+Pour le typage, un système de type \og à la \mlf \fg ~a été implémenté
+(cf. section "Extension : \mlf"). % TODO : utiliser les references Latex
 
 \subsection{Génération de code}
 Pour la génération du code le compilateur passe par une représentation intermédiaire (IR). \\
@@ -93,7 +97,16 @@ nécéssaire d'allouer l'espace nécessaire pour chacune des valeurs
 emplacements dans le tas et pouvoir les ajouter à leurs environements
 mutuels.
 
-\section{Extension : MLF}
+\section{Extension : \mlf}
+Nous avons implémenté le système de type décrit dans la thése de
+Didier le Botlan \textit{TODO : référence + bibliographie}. Il s'agit
+d'un algorithme d'inférence de type \og à la ML \fg~pour le système F.
+L'inférence de type dans le systeme F étant indécidable, des
+annotations sont parfois nécessaires pour obtenir des types polymorphes
+d'ordre supérieur (cependant l'instanciation des schémas de type est
+toujours implicite). La puissance du système \mlf réside dans le fait
+que tout les programme (non annotés) typables dans ML sont typables
+dans \mlf \emph{sans annotations}.
 
 
 \end{document}
