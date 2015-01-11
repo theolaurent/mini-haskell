@@ -1,0 +1,41 @@
+\documentclass[a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{listings}
+
+\begin{document}
+
+\section{Interface du compilateur}
+
+\subsection{Arguments}
+En plus des options \texttt{-{}-parse-only} et \texttt{-{}-type-only}, les options suivantes sont disponibles :
+\begin{itemize}
+\item[\texttt{-{}-print-ast}] Affiche l'arbre de syntaxe abstraite parsé.
+\item[\texttt{-{}-print-type}] Affiche le type de chacune des variables globales.
+\end{itemize}
+
+\subsection{Report d'erreur}
+Lors de chaque phase de la compilation (en l'occurence l'analyse syntaxique et le typage), le compilateur tente de trouver le plus d'erreurs possibles. Si à la fin d'une phase des erreurs ont été trouvées, elles sont affichées (dans l'ordre d'occurence) et la compilation s'arrête avec le code d'erreur $1$.
+
+\subsection{Erreur de typage}
+Lorsqu'une unification échoue, le terme de l'ast en cours d'inférence puis la trace des unifications successives sont affichées.
+
+\section{Choix techniques}
+\subsection{Analyse syntaxique}
+Le lexeur et le parseur sont générés à l'aide des outils ocamllex et menhir, respectivement. \\
+L'arbre syntaxique produit est un type riche : on distingue notamment les opérations binaires primitives (arithmétiques, logique, de comparaison et cons) des autre variables. Par contre les primitives \texttt{div}, \texttt{rem}, \texttt{putChar} et \texttt{error} sont traités comme n'importequ'elle variable.
+
+\subsection{Typage}
+Pour le typage, un système de type "à la MLF" a été implémenté (cf. section "Extension : MLF").
+
+\subsection{Génération de code}
+
+
+\section{Difficultés rencontrées}
+
+\section{Extension : MLF}
+
+
+\end{document}
