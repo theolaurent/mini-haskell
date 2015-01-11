@@ -7,7 +7,7 @@
 \usepackage{examplep}
 \usepackage{nameref}
 
-\title{TODO}
+\title{Projet de Compilation}
 
 \author{Jun \textsc{Maillard} et Théo \textsc{Laurent}}
 
@@ -19,45 +19,66 @@
 
 \maketitle
 
-% TODO : un anexe ``compilation'' avec l'utilisation de make + les
-% dépendances (ocaml 4.02 et ocamlgraph
-
 \section{Interface du compilateur}
 
 \subsection{Compilation}
-\PVerb{petitghc} est écrit en OCaml $4.02$. Il dépend de la bibliothèque ocamlgraph.
+\PVerb{petitghc} est écrit en OCaml $4.02$. Il dépend de la
+bibliothèque ocamlgraph.
 
 La commande \PVerb{make} compile \PVerb{petitghc}.
-La commande \PVerb{make clean} supprime tous les fichiers générés lors de la compilation.
+La commande \PVerb{make clean} supprime tous les fichiers générés lors
+de la compilation.
 
 \subsection{Arguments}
-En plus des options \PVerb{--parse-only} et \PVerb{--type-only}, les options suivantes sont disponibles :
+En plus des options \PVerb{--parse-only} et \PVerb{--type-only}, les
+options suivantes sont disponibles :
 \begin{itemize}
 \item[\PVerb{--print-ast}] Affiche l'arbre de syntaxe abstraite parsé.
-\item[\PVerb{--print-type}] Affiche le type de chacune des variables globales.
+\item[\PVerb{--print-type}] Affiche le type de chacune des variables
+  globales.
 \end{itemize}
 
 \subsection{Report d'erreurs}
-Lors de chaque phase de la compilation (en l'occurence l'analyse syntaxique et le typage), le compilateur tente de trouver le plus d'erreurs possibles. Si à la fin d'une phase des erreurs ont été trouvées, elles sont affichées (dans l'ordre d'occurence) et la compilation s'arrête avec le code d'erreur $1$.
+Lors de chaque phase de la compilation (en l'occurence l'analyse
+syntaxique et le typage), le compilateur tente de trouver le plus
+d'erreurs possibles. Si à la fin d'une phase des erreurs ont été
+trouvées, elles sont affichées (dans l'ordre d'occurence) et la
+compilation s'arrête avec le code d'erreur $1$.
 
-Au cours du typage, lorsqu'une unification échoue, le terme de l'ast en cours d'inférence puis la trace des unifications successives sont affichées.
+Au cours du typage, lorsqu'une unification échoue, le terme de l'ast
+en cours d'inférence puis la trace des unifications successives sont
+affichées.
 
 \section{Choix techniques}
 \subsection{Analyse syntaxique}
-Le lexeur et le parseur sont générés à l'aide des outils ocamllex et menhir, respectivement.
+Le lexeur et le parseur sont générés à l'aide des outils ocamllex et
+menhir, respectivement.
 
-L'arbre syntaxique produit est un type riche : on distingue notamment les opérations binaires primitives (arithmétiques, logique, de comparaison et cons) des autre variables. Par contre les primitives \PVerb{div}, \PVerb{rem}, \PVerb{putChar} et \PVerb{error} sont traités comme n'importequ'elle variable.
+L'arbre syntaxique produit est un type riche : on distingue notamment
+les opérations binaires primitives (arithmétiques, logique, de
+comparaison et cons) des autre variables. Par contre les primitives
+\PVerb{div}, \PVerb{rem}, \PVerb{putChar} et \PVerb{error} sont
+traités comme n'importe qu'elle variable.
 
 \subsection{Typage}
 Pour le typage, un système de type \og à la \mlf \fg ~a été implémenté
 (cf. section \ref{mlf}, \nameref{mlf}). % TODO : utiliser les references Latex
 
 \subsection{Génération de code}
-Pour la génération du code le compilateur passe par une représentation intermédiaire (IR).
+Pour la génération du code le compilateur passe par une représentation
+intermédiaire (IR).
 
-Cette représentation est une suite d'instruction linéaire. Le résultat de chaque instruction de l'IR est supposé être passé implicitement à l'instruction suivante.
+Cette représentation est une suite d'instruction linéaire. Le résultat
+de chaque instruction de l'IR est supposé être passé implicitement à
+l'instruction suivante.
 
-Elle peut accéder à la pile via les instructions \PVerb{Push} et \PVerb{Pop} ets certaines instructions modifient implicitement l'état de la pile (\PVerb{ApplyUncons} ajoute deux élément à la pile ; \PVerb{ApplyUnnop}, \PVerb{ApplyBinop} et \PVerb{CallFun} enlèvent des élements de la pile (leur argument) ; \PVerb{StartFun} et \PVerb{Return} initialise et restaure le tableau d'activation lors d'un appel).
+Elle peut accéder à la pile via les instructions \PVerb{Push} et
+\PVerb{Pop} est certaines instructions modifient implicitement l'état
+de la pile (\PVerb{ApplyUncons} ajoute deux élément à la pile ;
+\PVerb{ApplyUnnop}, \PVerb{ApplyBinop} et \PVerb{CallFun} enlèvent des
+élements de la pile (leur argument) ; \PVerb{StartFun} et
+\PVerb{Return} initialise et restaure le tableau d'activation lors
+d'un appel).
 
 Lors de la transformation de l'ast vers cette IR, les noms de
 variables sont remplaçés par leur emplacement (locale, argument, dans
@@ -76,7 +97,7 @@ et enfin l'expression filtrée par \PVerb{case ... of}.
 \section{Difficultés rencontrées}
 
 \subsection{Choix sur la forme de l'arbre de syntaxe abstraite}
-Nous avions choisis, car cela simplifiait l'algorithme de typage,
+Nous avions choisi, car cela simplifiait l'algorithme de typage,
 d'utiliser un AST minimaliste. Il contenait seulement l'application à
 un arguemnt, l'abstraction d'une variable et la construction \og let
 \fg, le reste étant abstrait via un ensemble de primitives (la
@@ -94,7 +115,7 @@ Celà a grandement complexifié le code de l'algorithme d'inférence de type.
 
 Lors du typage, le calcul des variables (de type) libres était
 extrêmement lent (plusieurs heures sur certains des exemples fournis).
-Nous avons donc choisis de stocker les variables libres contenues dans
+Nous avons donc choisi de stocker les variables libres contenues dans
 un schéma ou un type et de seulement les mettre à jour à la volée.
 
 
@@ -124,14 +145,23 @@ dans \mlf \emph{sans annotations}.
 \subsection{Exemples d'utilisations}
 
 \subsubsection{Typage du combinateur $\omega$}
-Il possible de donner divers type à l'expression $(\lambda x.\ x x)$ dans le système F. Le fichiers \og tests/supp/mlf.hs \fg{} illustre qu'il est typable avec \mlf en annotant l'argument $x$ par le schéma $\forall \alpha, \alpha \rightarrow \alpha$.
+Il possible de donner divers type à l'expression $(\lambda x.\ x x)$
+dans le système F. Le fichiers \og tests/supp/mlf.hs \fg{} illustre
+qu'il est typable avec \mlf en annotant l'argument $x$ par le schéma
+$\forall \alpha, \alpha \rightarrow \alpha$.
 
 
 \subsubsection{Les paires du $\lambda$-calcul}
-Le système F permet aussi d'obtenir un encodage des paires similaire à celui du $\lambda$-calcul. Le fichier \og tests/supp/pair.hs \fg{} présente cet encodage.
+Le système F permet aussi d'obtenir un encodage des paires similaire à
+celui du $\lambda$-calcul tout en conservant les types de \PVerb{fst}
+et \PVerb{snd}. Le fichier \og tests/supp/pair.hs \fg{} présente cet
+encodage.
 
 \subsubsection{Types existentiels}
-L'encodage des types existentiels est réalisable en annotant convenablement les paires. Ils permettent d'utiliser de manière uniforme des valeurs de type distincts. Un tentative d'encodage se trouve dans le fichier \og tests/supp/existentiel.hs \fg.
+L'encodage des types existentiels est réalisable en annotant
+convenablement les paires. Ils permettent d'utiliser de manière
+uniforme des valeurs de type distincts. Un tentative d'encodage se
+trouve dans le fichier \og tests/supp/existentiel.hs \fg.
 
 \begin{thebibliography}{1}
 
