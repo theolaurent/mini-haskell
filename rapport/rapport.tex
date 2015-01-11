@@ -14,6 +14,9 @@
 
 \maketitle
 
+% TODO : un anexe ``compilation'' avec l'utilisation de make + les
+% dépendances (ocaml 4.02 et ocamlgraph
+
 \section{Interface du compilateur}
 
 \subsection{Arguments}
@@ -24,7 +27,7 @@ En plus des options \PVerb{--parse-only} et \PVerb{--type-only}, les options sui
 \end{itemize}
 
 \subsection{Report d'erreur}
-Lors de chaque phase de la compilation (en l'occurence l'analyse syntaxique et le typage), le compilateur tente de trouver le plus d'erreurs possibles. Si à la fin d'une phase des erreurs ont été trouvées, elles sont affichées (dans l'ordre d'occurence) et la compilation s'arrête avec le code d'erreur }1}.
+Lors de chaque phase de la compilation (en l'occurence l'analyse syntaxique et le typage), le compilateur tente de trouver le plus d'erreurs possibles. Si à la fin d'une phase des erreurs ont été trouvées, elles sont affichées (dans l'ordre d'occurence) et la compilation s'arrête avec le code d'erreur $1$.
 
 \subsection{Erreur de typage}
 Lorsqu'une unification échoue, le terme de l'ast en cours d'inférence puis la trace des unifications successives sont affichées.
@@ -74,6 +77,8 @@ binaires natifs.
 Celà a grandement complexifié le code de l'algorithme d'inférence de type.
 
 \subsection{Calcul des variables libres lors du typage}
+
+Lors du typage,
 
 \subsection{Définitions mutuelement récursives}
 
