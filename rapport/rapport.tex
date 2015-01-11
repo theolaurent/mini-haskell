@@ -123,11 +123,14 @@ dans \mlf \emph{sans annotations}.
 
 \subsection{Exemples d'utilisations}
 
-\subsubsection{Typage du traditionnel}
+\subsubsection{Typage du combinateur $\omega$}
+Il possible de donner divers type à l'expression $(\lambda x.\ x x)$ dans le système F. Le fichiers \og tests/supp/mlf.hs \fg{} illustre qu'il est typable avec \mlf en annotant l'argument $x$ par le schéma $\forall \alpha, \alpha \rightarrow \alpha$.
 
-\subsubsection{Les paires du lambda calcul}
-TODO : cf these didier le botlan
+
+\subsubsection{Les paires du $\lambda$-calcul}
+Le système F permet aussi d'obtenir un encodage des paires similaire à celui du $\lambda$-calcul. Le fichier \og tests/supp/pair.hs \fg{} présente cet encodage.
 
 \subsubsection{Types existentiels}
+L'encodage des types existentiels est réalisable en annotant convenablement les paires. Ils permettent d'utiliser de manière uniforme des valeurs de type distincts. Un tentative d'encodage se trouve dans le fichier \og tests/supp/existentiel.hs \fg.
 
 \end{document}
