@@ -50,7 +50,7 @@ L'arbre syntaxique produit est un type riche : on distingue notamment les opéra
 
 \subsection{Typage}
 Pour le typage, un système de type \og à la \mlf \fg ~a été implémenté
-(cf. section \nameref{mlf}). % TODO : utiliser les references Latex
+(cf. section \ref{mlf}, \nameref{mlf}). % TODO : utiliser les references Latex
 
 \subsection{Génération de code}
 Pour la génération du code le compilateur passe par une représentation intermédiaire (IR).
@@ -112,7 +112,7 @@ respectifs.
 \subsection{Un système de type intéressant}
 
 Nous avons implémenté le système de type décrit dans la thése de
-Didier le Botlan \textit{TODO : référence + bibliographie}. Il s'agit
+Didier \textsc{Le Botlan} \cite{lebotlan}. Il s'agit
 d'un algorithme d'inférence de type \og à la ML \fg~pour le système F.
 L'inférence de type dans le systeme F étant indécidable, des
 annotations sont parfois nécessaires pour obtenir des types polymorphes
@@ -129,5 +129,17 @@ dans \mlf \emph{sans annotations}.
 TODO : cf these didier le botlan
 
 \subsubsection{Types existentiels}
+
+\begin{thebibliography}{1}
+
+\bibitem{lebotlan}
+  Didier \textsc{Le Botlan},
+  \emph{\mlf : An extension of ML with second-order polymorphism and
+    implicit instanciation}.
+  Thèse de Doctorat,
+  École Polytechnique,
+  Juin 2004.
+
+\end{thebibliography}
 
 \end{document}
