@@ -25,7 +25,7 @@
 \section{Interface du compilateur}
 
 \subsection{Compilation}
-\PVerb{petitghc} est écrit en OCaml $4.02$. Il dépend de la bibliothèqe ocamlgraph.
+\PVerb{petitghc} est écrit en OCaml $4.02$. Il dépend de la bibliothèque ocamlgraph.
 
 La commande \PVerb{make} compile \PVerb{petitghc}.
 La commande \PVerb{make clean} supprime tous les fichiers générés lors de la compilation.
@@ -39,11 +39,13 @@ En plus des options \PVerb{--parse-only} et \PVerb{--type-only}, les options sui
 
 \subsection{Report d'erreurs}
 Lors de chaque phase de la compilation (en l'occurence l'analyse syntaxique et le typage), le compilateur tente de trouver le plus d'erreurs possibles. Si à la fin d'une phase des erreurs ont été trouvées, elles sont affichées (dans l'ordre d'occurence) et la compilation s'arrête avec le code d'erreur $1$.
-Lorsqu'une unification échoue, le terme de l'ast en cours d'inférence puis la trace des unifications successives sont affichées.
+
+Au cours du typage, lorsqu'une unification échoue, le terme de l'ast en cours d'inférence puis la trace des unifications successives sont affichées.
 
 \section{Choix techniques}
 \subsection{Analyse syntaxique}
-Le lexeur et le parseur sont générés à l'aide des outils ocamllex et menhir, respectivement. \\
+Le lexeur et le parseur sont générés à l'aide des outils ocamllex et menhir, respectivement.
+
 L'arbre syntaxique produit est un type riche : on distingue notamment les opérations binaires primitives (arithmétiques, logique, de comparaison et cons) des autre variables. Par contre les primitives \PVerb{div}, \PVerb{rem}, \PVerb{putChar} et \PVerb{error} sont traités comme n'importequ'elle variable.
 
 \subsection{Typage}
@@ -51,9 +53,12 @@ Pour le typage, un système de type \og à la \mlf \fg ~a été implémenté
 (cf. section \nameref{mlf}). % TODO : utiliser les references Latex
 
 \subsection{Génération de code}
-Pour la génération du code le compilateur passe par une représentation intermédiaire (IR). \\
-Cette représentation est une suite d'instruction linéaire. Le résultat de chaque instruction de l'IR est supposé être passé implicitement à l'instruction suivante. \\
-Elle peut accéder à la pile via les instructions \PVerb{Push} et \PVerb{Pop} ets certaines instructions modifient implicitement l'état de la pile (\PVerb{ApplyUncons} ajoute deux élément à la pile ; \PVerb{ApplyUnnop}, \PVerb{ApplyBinop} et \PVerb{CallFun} enlèvent des élements de la pile (leur argument) ; \PVerb{StartFun} et \PVerb{Return} initialise et restaure le tableau d'activation lors d'un appel). \\
+Pour la génération du code le compilateur passe par une représentation intermédiaire (IR).
+
+Cette représentation est une suite d'instruction linéaire. Le résultat de chaque instruction de l'IR est supposé être passé implicitement à l'instruction suivante.
+
+Elle peut accéder à la pile via les instructions \PVerb{Push} et \PVerb{Pop} ets certaines instructions modifient implicitement l'état de la pile (\PVerb{ApplyUncons} ajoute deux élément à la pile ; \PVerb{ApplyUnnop}, \PVerb{ApplyBinop} et \PVerb{CallFun} enlèvent des élements de la pile (leur argument) ; \PVerb{StartFun} et \PVerb{Return} initialise et restaure le tableau d'activation lors d'un appel).
+
 Lors de la transformation de l'ast vers cette IR, les noms de
 variables sont remplaçés par leur emplacement (locale, argument, dans
 l'environement la fermeture, globale).
@@ -72,15 +77,15 @@ et enfin l'expression filtrée par \PVerb{case ... of}.
 
 \subsection{Choix sur la forme de l'arbre de syntaxe abstraite}
 Nous avions choisis, car cela simplifiait l'algorithme de typage,
-d'utiliser un AST minimaliste. Il contenait seulement l'application a
+d'utiliser un AST minimaliste. Il contenait seulement l'application à
 un arguemnt, l'abstraction d'une variable et la construction \og let
-\fg. Le reste étant abstrait via un ensemble de primitives (la
+\fg, le reste étant abstrait via un ensemble de primitives (la
 condition \og if \fg, le pattern-matching, etc...).
 
-Ce choix c'est avéré très peu pratique pour la gérération de code où
+Ce choix s'est avéré très peu pratique pour la gérération de code où
 nous avions besoin d'un maximum de précision pour pouvoir procéder à
-des optimisations. Nous somme donc revenu sur notre choix et avons
-intégré à l'AST des \og constructions séciales \fg~puis des opérateurs
+des optimisations. Nous sommes donc revenu sur notre choix et avons
+intégré à l'AST des \og constructions spéciales \fg~puis des opérateurs
 binaires natifs.
 
 Celà a grandement complexifié le code de l'algorithme d'inférence de type.
@@ -88,19 +93,19 @@ Celà a grandement complexifié le code de l'algorithme d'inférence de type.
 \subsection{Calcul des variables libres lors du typage}
 
 Lors du typage, le calcul des variables (de type) libres était
-extrèmement lent (plusieurs heures sur certains des exemples fournis).
+extrêmement lent (plusieurs heures sur certains des exemples fournis).
 Nous avons donc choisis de stocker les variables libres contenues dans
-un schéma on un type et de seulement les mettre à jour à la volée.
+un schéma ou un type et de seulement les mettre à jour à la volée.
 
 
 \subsection{Définitions mutuelement récursives}
 
 La compilation des valeurs mutuellement récursives a posé quelques
-petites difficutlés, nous nous sommes rendu compte qu'il était
+petites difficultés, nous nous sommes rendu compte qu'il était
 nécéssaire d'allouer l'espace nécessaire pour chacune des valeurs
 \emph{avant} la compilation de celles-ci, pour connaitre leurs
 emplacements dans le tas et pouvoir les ajouter à leurs environements
-mutuels.
+respectifs.
 
 \section{Extension : \mlf}\label{mlf}
 
