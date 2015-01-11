@@ -55,10 +55,6 @@ let ident = ['a'-'z'] ([ 'a'-'z'] | ['A'-'Z'] | '_' | '\'' | ['0'-'9' ])*
 let lident = ['A'-'Z'] ([ 'a'-'z'] | ['A'-'Z'] | '_' | '\'' | ['0'-'9' ])*
 let car = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t"
 
-	      (*
-let car = (['\032' - '\126'] # ['\\' '\'']) (* what about \' ?? *)
-let car_str = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t" | "\'"
- *)
 
 rule token = parse
   | [' ' '\t' '\r']      { token lexbuf }
@@ -108,12 +104,6 @@ rule token = parse
 
 and char = parse
   | (car as c) '\''      { CHAR (unescape_char c) }
-(*  | "\\\\'"             { CHAR '\\' }
-  | "\\\"'"             { CHAR '\"' }
-  | "\\''"              { CHAR '\'' }
-  | "\\n'"              { CHAR '\n' }
-  | "\\t'"              { CHAR '\t' }
- *)
   | '\n'                { lexing_error "Newline in char litteral" lexbuf ;
 			  Lexing.new_line lexbuf ; char lexbuf }
   | '\\' car '\''       { lexing_error "Unknown escape sequence" lexbuf ; CHAR '\000' }

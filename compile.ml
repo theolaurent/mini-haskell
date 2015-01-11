@@ -109,10 +109,6 @@ let div_by_zero_msg =
   ++ asciiz "error : division by zero\n"
 
 
-(* Store the env in memory [ *r + delta ; *r + delta + 4 * (length env - 1)]
-   r must be different from a1, sp, ra
-   I've assumed the environment starts at sp but I'm probably wrong...
- *)
 let read_variable dest var =
   match var with
   | GlobalVar s -> lw dest alab ("G" ^ s)
@@ -129,6 +125,8 @@ let write_variable src var =
   | ClosureVar _ -> (Printf.printf "ICE : trying to write the environment" ; exit 2)
   | ArgVar -> (Printf.printf "ICE : try to write the argument" ; exit 2)
 
+(* Store the env in memory [ *r + delta ; *r + delta + 4 * (length env - 1)]
+   r must be different from s0, s1, t0, sp, ra *)
 let write_env env (delta, r) =
   List.fold_left
     (fun (code, delta) var ->
@@ -148,7 +146,7 @@ let allocate size =
   ++ syscall
 
 
-
+(* Not lazy *)
 let binary_primtives p = match p with
   | `add -> (fun d r1 r2 -> add d r1 oreg r2)
   | `sub -> (fun d r1 r2 -> sub d r1 oreg r2)

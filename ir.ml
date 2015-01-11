@@ -1,9 +1,5 @@
 open Ast
 
-
-
-(* TODO : a nice interface, cf mips.ml *)
-
 type variable =
   | GlobalVar of string (* on data segment *)
   | LocalVar of int     (* on stack, index starting at fp *)
@@ -58,7 +54,6 @@ and binprim = [ `div | `rem | `add | `sub | `mul | `lt
 
 type free_vars_expr = var list gen_expr
 
-(* TODO : don't use lists for sequences ! *)
 
 let next_label =
   let n = ref (-1) in
@@ -70,8 +65,7 @@ let index l x =
   | h :: t -> if h = x then i else loop t (i + 1)
   in loop l 0
 
-let calc_free_vars_ast ast(*:typed_ast*) : free_vars_expr =
-  (* TODO : the transformation from lists to set has become usefull ! *)
+let calc_free_vars_ast ast : free_vars_expr =
   let f set _ = VarSet.fold (fun x res -> x :: res) set []
   in gen_traversal f (annot_free_vars ast)
 
@@ -116,10 +110,6 @@ let const_to_ir c =
   | CInt i -> [ Value (Imm i) ]
   | CChar c -> [ Value (Imm (int_of_char c)) ]
   | CEmpty -> [ Value (Imm 0) ]
-        (* be carefull with partial applications *)
-       (* do not forget to force *)
-       (* TODO : change primitives from string to a variant type in the whole compiler ; *)
-(*  | CPrim _ -> (Printf.printf "Unexpected primtive value" ; exit 2) *)
 
 let arithmetic_to_ir a =
   match a with
@@ -170,12 +160,14 @@ let rec binop_to_ir (env : variable VarMap.t) locals (b, e1, e2) =
 
 
 
-and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) = match ast.data with
+and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) =
+  match ast.data with
   | Const c ->
      begin
        [ Alloc (AImm) ] @ (const_to_ir c)
      end
-  | Var v -> [ Fetch (try VarMap.find v env with Not_found -> GlobalVar v) ] (* the evaluation is not forced *)
+  | Var v -> [ Fetch (try VarMap.find v env with Not_found -> GlobalVar v) ]
+  (* the evaluation is not forced *)
   | Abstr ({ data = v ; _ }, body) ->
      let free_vars = filter_out_globals env ast.annot in
      let new_env =
@@ -189,7 +181,9 @@ and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) = match ast
      in
      [ Branch lcont ; Label lfunc ; StartCall ]
      @ (expr_to_ir new_env 0 body)
-     @ [ ReturnCall ; Label lcont ; Alloc (AClos (List.length clos_env)) ; Value (Clos (lfunc, clos_env)) ]
+     @ [ ReturnCall ; Label lcont ;
+	 Alloc (AClos (List.length clos_env)) ;
+	 Value (Clos (lfunc, clos_env)) ]
   | App (f, e) ->
      (froze env e)
      @ [ Push ]
@@ -283,7 +277,6 @@ and store_frozen env e =
      (* get the indices of all free variables to build the env of the closure *)
      [ Branch lcont ; Label lfroz ; StartCall ]
      @ (expr_to_ir new_env 0 e)
-     (* no need of a "return" ?? to see with the force function *)
      @ [ ReturnCall ; Label lcont ; Value (Froz (lfroz, froz_env)) ]
 and froze env e =
   (alloc_frozen env e) @ (store_frozen env e)

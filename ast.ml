@@ -52,7 +52,6 @@ and 'a spec =
 and 'a gen_def = 'a annoted_var * 'a gen_expr
 
 
-(* TODO : use this type everywhere we need a position e.g. the errors module *)
 
 type expr = (Pos.t * [ `Unty | `Annot of Typer.Schema.schema ]) gen_expr
 type def = (Pos.t * [ `Unty | `Annot of Typer.Schema.schema ]) gen_def

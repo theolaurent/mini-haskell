@@ -6,7 +6,7 @@ let print_const ff = function
   | CInt i -> Format.fprintf ff "%d" i
   | CChar c -> Format.fprintf ff "'%s'" (Char.escaped c)
   | CEmpty -> Format.fprintf ff "[]"
-(*  | CPrim s -> Format.fprintf ff "%s" s *)
+
 let print_binop ff b =
   Format.fprintf ff
   (match b with
@@ -22,7 +22,7 @@ let print_binop ff b =
    | Logical And -> "&&"
    | Logical Or  -> "||"
    | Cons -> ":")
-			     
+
 
 let rec print_ast ff ast = match ast.data with
   | Spec s ->
@@ -41,7 +41,7 @@ let rec print_ast ff ast = match ast.data with
      end
   | Binop (b, x, y) ->
 	  Format.fprintf ff "%a %a %a" print_ast x print_binop b print_ast y
-	    
+
 and print_spec ff = function
     | If (cond, btrue, bfalse) ->
        Format.fprintf ff "if %a@ then %a@ else %a"
@@ -56,7 +56,7 @@ and print_spec ff = function
 		      hd.data tl.data
 		      print_ast bnempty ;
        Format.close_box () ;
-       Format.fprintf ff "@ }@ "			
+       Format.fprintf ff "@ }@ "
     | Do l ->
        Format.fprintf ff "do {@ " ;
        Format.open_hovbox 4 ;
@@ -73,4 +73,3 @@ and print_spec ff = function
 	       Format.fprintf ff "%s =@ %a;" x.data print_ast b ;
 	       Format.close_box () ;
 	       Format.print_cut ()) l
-

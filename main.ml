@@ -136,6 +136,7 @@ let () =
     |> Ast.VarSet.add "rem"
   in
 
+  (* Stora all the global declarations, and the force the main *)
   let ir =
     let ir =
       List.fold_left
@@ -146,12 +147,18 @@ let () =
     in
     ir @ [Ir.Fetch (Ir.GlobalVar "main") ; Ir.Force]
   in
-  let code = List.fold_left (fun code instr -> code ++ Compile.compile_instr instr)
-			    nop ir
+
+  (* Compile to mips *)
+  let code =
+    List.fold_left
+      (fun code instr -> code ++ Compile.compile_instr instr)
+      nop ir
   in
+  (* Add labels for globals in data section *)
   let data =
-    List.fold_left (fun code ({ Ast.data = s ; _}, _) -> code ++ label ("G" ^ s) ++ dword [0])
-		   nop defs
+    List.fold_left
+      (fun code ({ Ast.data = s ; _}, _) -> code ++ label ("G" ^ s) ++ dword [0])
+      nop defs
   in
   let program =
       {

@@ -10,8 +10,6 @@ let error (module ErrM: Errors.S) prefix msg pos =
 let parsing_error = error (module Err)     "syntax error: "
 let typing_error  = error (module TypeErr) "typing error: "
 
-(* TODO : improve error reporting by adding some error
-          cases in the grammar *)
 let check_uniqueness name pos l =
   let l = List.sort compare l in
   let rec pred = function
@@ -282,12 +280,6 @@ opt_separated_list(sep, X):
 | x = X ; sep? { [x] }
 | x = X ; sep ; l = opt_separated_list(sep, X) { x :: l }
 
-
-
-(*identifier0:
-| i = ID0 { annotate (pos $startpos(i) $endpos(i)) i }
-| i = ID0 DCOL s = schema { annotate (pos $startpos(i) $endpos(i)) ~ty:(`Annot s) i }
-*)
 
 identifier:
 | i = ID { annotate (pos $startpos(i) $endpos(i)) i }
