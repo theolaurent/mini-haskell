@@ -36,7 +36,7 @@ let invalid_application fn arg =
   Format.flush_str_formatter ()
 
 let invalid_binop expr =
-  Format.fprintf (Format.str_formatter) "While type %a"
+  Format.fprintf (Format.str_formatter) "While typing %a"
 		 Printer.print_ast expr ;
   Format.flush_str_formatter ()
 
@@ -83,12 +83,12 @@ let universal_type q =
 
 module Make(Err:Errors.S) =
 struct
-  let error msgs spos epos =
+  let error msgs pos =
     let msg =
       List.fold_left (fun s m -> s ^ "\n\t\t" ^ m)
         (List.hd msgs) (List.tl msgs)
     in
-    Err.report ("type error : " ^ msg) spos epos
+    Err.report ("type error : " ^ msg) pos
 
   let infer_binop = function
     | Arithmetic _ -> Definitions.arithmetic
@@ -98,7 +98,7 @@ struct
 
   (* type inference *)
   let rec infer q env expr =
-    let (Pos (spos, epos), annot) = expr.annot in
+    let (pos, annot) = expr.annot in
     let (q, sch) =
       match expr.data with
       | Const c -> (q, infer_const c)
@@ -107,7 +107,7 @@ struct
 	  try
             (q, List.assoc x env)
           with Not_found ->
-	    error [variable_not_found x] spos epos ;
+	    error [variable_not_found x] pos ;
 	    universal_type q
         end
       | Abstr (x, a) -> begin
@@ -159,16 +159,16 @@ struct
 	    let (q4, q5) = Schema.split q3 (set_of_list (fst (List.split q))) in
 	    (q4, forall_map q5 @@ ty @@ var beta)
 	  with Unification.Failure trace ->
-	    error (invalid_application a b :: trace) spos epos ;
+	    error (invalid_application a b :: trace) pos ;
 	    universal_type q
         end
       | Let (l, expr) ->
         let (q1, defs) =
-	  infer_potentially_mutually_recursive_definitions q env l spos epos
+	  infer_potentially_mutually_recursive_definitions q env l pos
         in
         infer q1 (defs @ env) expr
       | Spec s ->
-        infer_spec q env spos epos s
+        infer_spec q env pos s
       | Binop (b, x, y) ->
 	 begin
 	   let schema_op = infer_binop b in
@@ -191,7 +191,7 @@ struct
 	     let (q4, q5) = Schema.split q3 (set_of_list (fst (List.split q))) in
 	     (q4, forall_map q5 @@ ty @@ var beta)
 	   with Unification.Failure trace ->
-	     error (invalid_binop expr :: trace) spos epos ;
+	     error (invalid_binop expr :: trace) pos ;
 	     universal_type q
 	 end
     in
@@ -205,7 +205,7 @@ struct
 	      (var alpha) (var beta)
       in (q', s)
 
-  and infer_potentially_mutually_recursive_definitions q env l spos epos =
+  and infer_potentially_mutually_recursive_definitions q env l pos =
     let rec add_edges_from bound x expr (env, g) =
       match expr.data with
       | Const _ -> (env, g)
@@ -218,9 +218,9 @@ struct
 	   then (env, g)
 	   else (* Ident is not *)
 	     begin
-	       let (Pos (spos, epos)) = fst expr.annot in
+	       let pos = fst expr.annot in
 	       let msg = "Unbound identifier " ^ y in
-	       Err.report msg spos epos ;
+	       error [msg] pos ;
 	       let v = Var.fresh () in
 	       ((y, forall ??v @@ ty @@ var v) :: env, g)
 	     end
@@ -263,7 +263,7 @@ struct
 	   |> add_edges_from bound x b
       in
       if List.length l = 1
-      then infer_mutually_recursive_definitions q env l spos epos
+      then infer_mutually_recursive_definitions q env l pos
       else begin
         let (env, g) =
 	  List.fold_left
@@ -282,12 +282,12 @@ struct
         List.fold_left
 	  (fun (q, vars) l ->
 	     let (q, nv) =
-	       infer_mutually_recursive_definitions q (vars @ env) l spos epos
+	       infer_mutually_recursive_definitions q (vars @ env) l pos
 	     in
 	     (q, nv @ vars)) (q, []) ls
       end
 
-    and infer_mutually_recursive_definitions q env l spos epos =
+    and infer_mutually_recursive_definitions q env l pos =
       try
         let defVar = List.map (fun (x, _) -> (x, Var.fresh ())) l in
         let q1 = List.fold_left (fun q1 (x, a) ->
@@ -326,7 +326,7 @@ struct
 	 List.map (fun (x,alpha) ->
 		   (x.data, forall_map q6 @@ ty @@ var alpha)) defVar)
       with Unification.Failure trace ->
-        error (invalid_mutually_recursive_definition l :: trace) spos epos;
+        error (invalid_mutually_recursive_definition l :: trace) pos;
         let defVar = List.map
 	    (fun (x, _) ->
 	       let v = Var.fresh () in
@@ -334,7 +334,7 @@ struct
         in
         (q, defVar)
 
-    and infer_spec q env spos epos = function
+    and infer_spec q env pos = function
       | If (cond, b1, b2) ->
         begin
 	  let (q1, sigmaCond) = infer q env cond in
@@ -344,7 +344,7 @@ struct
 	      unify ((alpha >=? sigmaCond) :: q1)
 	            (var alpha) !!"Bool"
 	    with Unification.Failure trace ->
-	      error (invalid_condition cond :: trace) spos epos ;
+	      error (invalid_condition cond :: trace) pos ;
 	      q
 	  in
 	  let (q3, sigma1) = infer q2 env b1 in
@@ -364,7 +364,7 @@ struct
 	    let (q6, q7) = Schema.split q5 (set_of_list (fst (List.split q))) in
 	    (q6, forall_map q7 @@ ty @@ var beta1)
 	  with Unification.Failure trace ->
-	    error (invalid_branches b1 b2 :: trace) spos epos ;
+	    error (invalid_branches b1 b2 :: trace) pos ;
 	    universal_type q
         end
       | Case (l, bempty, hd, tl, bnempty) ->
@@ -380,7 +380,7 @@ struct
 	        (var alpha)
 	        (list @@ var listType)
 	    with Unification.Failure trace ->
-	      error (invalid_condition l :: trace) spos epos ;
+	      error (invalid_condition l :: trace) pos ;
 	      ??listType :: q
 	  in
 
@@ -408,7 +408,7 @@ struct
 	    let (q6, q7) = Schema.split q5 (set_of_list (fst (List.split q))) in
 	    (q6, forall_map q7 @@ ty @@ var beta1)
 	  with Unification.Failure trace ->
-	    error (invalid_branches bempty bnempty :: trace) spos epos ;
+	    error (invalid_branches bempty bnempty :: trace) pos ;
 	    universal_type q
         end
       | Do instrs ->
@@ -422,8 +422,8 @@ struct
 		  (var v)
 		  (io !!"()")
 	    with Unification.Failure trace ->
-	      let (Pos (spos, epos), _) = expr.annot in
-	      error (invalid_instruction expr :: trace) spos epos ;
+	      let (pos, _) = expr.annot in
+	      error (invalid_instruction expr :: trace) pos ;
 	      q2
 	     ) q instrs
          in

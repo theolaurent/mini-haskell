@@ -7,7 +7,7 @@ let rec print_type ff t =
   | Ty.TVar v ->
      Format.fprintf ff "%a" print_variable v
   | Ty.TArrow (t1, t2) ->
-     Format.fprintf ff "%a → %a" print_type t1 print_type t2
+     Format.fprintf ff "(%a → %a)" print_type t1 print_type t2
   | Ty.TConst (constr, tlist) ->
      Format.fprintf ff "%s%a" constr print_type_list tlist
   | Ty.TBot ->

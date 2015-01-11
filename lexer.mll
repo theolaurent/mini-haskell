@@ -7,9 +7,10 @@
   open P
 
   let lexing_error msg lexbuf =
+    let start = Lexing.lexeme_start_p lexbuf in
+    let stop = Lexing.lexeme_end_p lexbuf in
     Err.report ("lexing error: " ^ msg)
-               (Lexing.lexeme_start_p lexbuf)
-               (Lexing.lexeme_end_p lexbuf)
+               (Pos.position ~start ~stop)
 
 
   let unescape_char = function
@@ -21,7 +22,7 @@
       if String.length s = 1
       then s.[0]
       else assert false
-	 
+
   let unescape l =
     let s = Bytes.make (List.length l) '\000' in
     let rec impl i l =
@@ -58,7 +59,7 @@ let car = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t"
 let car = (['\032' - '\126'] # ['\\' '\'']) (* what about \' ?? *)
 let car_str = (['\032' - '\126'] # ['\\' '"']) | "\\\\" | "\\\"" | "\\n" | "\\t" | "\'"
  *)
-	      
+
 rule token = parse
   | [' ' '\t' '\r']      { token lexbuf }
   | '\n'                 { Lexing.new_line lexbuf ; token lexbuf }
@@ -114,7 +115,7 @@ and char = parse
   | "\\t'"              { CHAR '\t' }
  *)
   | '\n'                { lexing_error "Newline in char litteral" lexbuf ;
-			  Lexing.new_line lexbuf ; char lexbuf } 
+			  Lexing.new_line lexbuf ; char lexbuf }
   | '\\' car '\''       { lexing_error "Unknown escape sequence" lexbuf ; CHAR '\000' }
   | car                 { lexing_error "Too many character literal" lexbuf ; char lexbuf }
   | '\''                { lexing_error "Empty character literal" lexbuf ; CHAR '\000' }
@@ -128,20 +129,20 @@ and string str = parse
   | '\n'           { lexing_error "Newline in string litteral" lexbuf ;
 		     Lexing.new_line lexbuf ; string [] lexbuf
 		   }
-  | '\\'           { lexing_error "Unknown escape sequence" lexbuf ; 
+  | '\\'           { lexing_error "Unknown escape sequence" lexbuf ;
 		     string [] lexbuf }
-  | eof            { lexing_error "Unterminated string" lexbuf ; 
+  | eof            { lexing_error "Unterminated string" lexbuf ;
 		     STR "" }
-  | _              { lexing_error "Unknown character in string literal" lexbuf ; 
+  | _              { lexing_error "Unknown character in string literal" lexbuf ;
 		     string [] lexbuf }
-      
+
 and lcomment = parse
   | '\n'                 { Lexing.new_line lexbuf ; token lexbuf }
   | eof                  { lexing_error "Unterminated comment" lexbuf ; EOF }
   | _                    { lcomment lexbuf  }
 
-			 
-				    
+
+
 
 {
   end

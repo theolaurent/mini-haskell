@@ -2,16 +2,17 @@
 %{
 open Ast
 open Utils.OptionM
-       
-let parsing_error msg startpos endpos =
-  let () = Err.report ("syntax error: " ^ msg)
-      (startpos)
-      (endpos)
-  in None
-    
+
+let error (module ErrM: Errors.S) prefix msg pos =
+  ErrM.report (prefix ^ msg) pos ;
+  None
+
+let parsing_error = error (module Err)     "syntax error: "
+let typing_error  = error (module TypeErr) "typing error: "
+
 (* TODO : improve error reporting by adding some error
           cases in the grammar *)
-let check_uniqueness name spos epos l =
+let check_uniqueness name pos l =
   let l = List.sort compare l in
   let rec pred = function
     | [] | [_] -> []
@@ -22,26 +23,28 @@ let check_uniqueness name spos epos l =
   in
   List.iter (fun (x, y) ->
       let n = name x in
-      TypeErr.report ("type error: " ^ "identifier " ^ n ^ " is bound here...") (spos x) (epos x);
-      TypeErr.report ("type error: " ^ "... but is also bound there") (spos y) (epos y)
+      typing_error ("identifier " ^ n ^ " is bound here...") (pos x)
+      |> ignore ;
+      typing_error "... but is also bound there"             (pos y)
+      |> ignore
     ) (pred l)
 
 
-let ann spos epos ?ty expr =
-  annotate (pos spos epos) ?ty expr
+let ann start stop ?ty expr =
+  annotate (Pos.position ~start ~stop) ?ty expr
+
+let pos start stop = Pos.position ~start ~stop
 
 module Id =
 struct
   let name { data ; _ } = data
-  let spos { annot = (Pos (s, _), _) ; _ } = s
-  let epos { annot = (Pos (_, e), _) ; _ } = e
+  let pos { annot = (p, _) ; _ } = p
 end
 
 module Def =
 struct
   let name d = Id.name (fst d)
-  let spos d = Id.spos (fst d)
-  let epos d = Id.epos (fst d)
+  let pos d = Id.pos (fst d)
 end
 
 
@@ -49,13 +52,13 @@ end
 
 %parameter <Err:Errors.S>
 %parameter <TypeErr:Errors.S>
-                                    
+
 %token <string> STR
 %token <char> CHAR
 %token <int> INT
 %token <bool> BOOL
 %token <string> ID
-%token <string> LID				
+%token <string> LID
 %token <string> ID0
 %token ELSE IF IN LET CASE THEN RETURN DO OF
 %token LP RP LB RB LBK RBK
@@ -76,7 +79,7 @@ end
 %left PLUS MINUS
 %left MULT
 %nonassoc UMINUS
-  
+
 %start <Ast.def list> main
 
 %%
@@ -91,12 +94,12 @@ main:
          | None -> l
       ) ds []
     in
-    check_uniqueness Def.name Def.spos Def.epos l ;
+    check_uniqueness Def.name Def.pos l ;
     l
   }
 | error EOF
-  { ignore (parsing_error "..." $startpos($1) $endpos($1)) ; [] }
-  
+  { ignore (parsing_error "..." (pos $startpos($1) $endpos($1))) ; [] }
+
 
 def0:
 | s = signature0 id = ID0 l = list(identifier) EQ e = expr
@@ -106,8 +109,8 @@ def0:
       if id = id'
       then Some sch
       else None
-    in          
-    check_uniqueness Id.name Id.spos Id.epos l ;
+    in
+    check_uniqueness Id.name Id.pos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) ?ty id in
         (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
@@ -115,27 +118,27 @@ def0:
   }
 | id = ID0 l = list(identifier) EQ e = expr
   {
-    check_uniqueness Id.name Id.spos Id.epos l ;
+    check_uniqueness Id.name Id.pos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) id in
         (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
       ) e
   }
-  
+
 def:
 | s = signature SCOL id = ID l = list(identifier) EQ e = expr
   {
     let (id', sch) = s in
     let ty = if id = id' then Some sch else None in
-    check_uniqueness Id.name Id.spos Id.epos l ;
+    check_uniqueness Id.name Id.pos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) ?ty id in
         (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
-      ) e    
+      ) e
   }
 | id = ID l = list(identifier) EQ e = expr
   {
-    check_uniqueness Id.name Id.spos Id.epos l ;
+    check_uniqueness Id.name Id.pos l ;
     map (fun e ->
         let id = ann $startpos(id) $endpos(id) id in
         (id, expr_lambda (pos $startpos(id) $endpos(e)) l e)
@@ -145,7 +148,7 @@ def:
 signature0:
 | id = ID0 DCOL s = schema
   { (id, Schema_ast.convert s) }
-  
+
 signature:
 | id = ID DCOL s = schema
   { (id, Schema_ast.convert s) }
@@ -157,11 +160,11 @@ schema:
   {
     Schema_ast.S (l, Schema_ast.Ty t)
   }
-      
+
 schema_binding:
-| id = ID { Schema_ast.generic_var id }              
+| id = ID { Schema_ast.generic_var id }
 | id = ID b = schema_bound LP s = schema RP { (id, b, s) }
-          
+
 schema_bound:
 | GEQ { Schema_ast.Flexible }
 | EQ  { Schema_ast.Rigid }
@@ -171,24 +174,26 @@ simple_ty:
 | i = tid { Schema_ast.Identifier (i, []) }
 
 ty:
-| i = tid l = list(simple_ty) { Schema_ast.Identifier (i, l) }     
+| i = tid l = nonempty_list(simple_ty) { Schema_ast.Identifier (i, l) }
 | t1 = ty ARR t2 = ty { Schema_ast.Arrow (t1, t2) }
+| s = simple_ty { s }
+
 
 tid:
 | i = ID { i }
 | i = LID { i }
 | LP RP { "()" }
-		      
+
 simple_expr:
 | LP e = expr RP { map Utils.id e }
-| LP error RP    { parsing_error "..." $startpos($2) $endpos($2) }
+| LP error RP    { parsing_error "..." (pos $startpos($2) $endpos($2)) }
 | id = ID { Some (ann $startpos(id) $endpos(id) (Var id)) }
 | c = const { map Utils.id c }
 | LBK l = separated_list(COM, expr) RBK
   {
-    map (expr_list (pos $startpos($1) $endpos($3))) (sequence l)
+    map (expr_list (Pos.position ~start:$startpos($1) ~stop:$endpos($3))) (sequence l)
   }
-| LBK error RBK { parsing_error "..." $startpos($2) $endpos($2) }
+| LBK error RBK { parsing_error "..." (pos $startpos($2) $endpos($2)) }
 
 expr:
 | LP e = expr DCOL s = schema RP
@@ -202,13 +207,14 @@ expr:
   }
 | BSLASH l = nonempty_list(identifier) ARR e = expr
   {
-    check_uniqueness Id.name Id.spos Id.epos l ;
+    check_uniqueness Id.name Id.pos l ;
     map (fun e -> expr_lambda (pos $startpos($1) $endpos(e)) l e) e
   }
 | BSLASH ARR expr
   {
-    parsing_error "Expecting variable(s) in lambda-clause" $startpos($1) $endpos($2)
-  } 
+    parsing_error "Expecting variable(s) in lambda-clause"
+		  (pos $startpos($1) $endpos($2))
+  }
 | MINUS e = expr %prec UMINUS
   {
     map (expr_unary_minus @@ pos $startpos($1) $endpos(e)) e
@@ -231,14 +237,14 @@ expr:
   }
 | LET l = binds IN e = expr
   {
-    iter (check_uniqueness Def.name Def.spos Def.epos) l ;
+    iter (check_uniqueness Def.name Def.pos) l ;
     map2 (expr_let @@ pos $startpos($1) $endpos(e)) l e
   }
 | CASE e = expr OF LB
   LBK RBK ARR x = expr SCOL
   hd = identifier COL tl = identifier ARR y = expr SCOL? RB
   {
-    check_uniqueness Id.name Id.spos Id.epos [hd ; tl] ;
+    check_uniqueness Id.name Id.pos [hd ; tl] ;
     map3
       (fun e x y ->
          expr_case (pos $startpos($1) $endpos($16)) e x hd tl y
@@ -254,20 +260,22 @@ expr:
     in
     map (expr_do @@ pos $startpos($1) $endpos($4)) l
   }
-| DO LB SCOL RB 
-  { parsing_error "do expects one or more expressions" $startpos($2) $endpos($4) }
+| DO LB SCOL RB
+  { parsing_error "do expects one or more expressions" (pos $startpos($2) $endpos($4)) }
 | DO LB RB
-  { parsing_error "do expects one or more expressions" $startpos($2) $endpos($3) }
+  { parsing_error "do expects one or more expressions" (pos $startpos($2) $endpos($3)) }
 | RETURN LP RP
   { Some (expr_return @@ pos $startpos($1) $endpos($3)) }
-  
+
 binds:
 | d = def { map (fun x -> [x]) d }
 | LB l = opt_separated_list(SCOL, def) RB { sequence l }
-| LB SCOL RB 
-  { parsing_error "let expects one or more bindings" $startpos($1) $endpos($3) }
+| LB SCOL RB
+     { parsing_error "let expects one or more bindings"
+		     (pos $startpos($1) $endpos($3)) }
 | LB RB
-  { parsing_error "let expects one or more bindings" $startpos($1) $endpos($2) } 
+     { parsing_error "let expects one or more bindings"
+		     (pos $startpos($1) $endpos($2)) }
 
 
 opt_separated_list(sep, X):
@@ -275,13 +283,13 @@ opt_separated_list(sep, X):
 | x = X ; sep ; l = opt_separated_list(sep, X) { x :: l }
 
 
-  
-(*identifier0:				
+
+(*identifier0:
 | i = ID0 { annotate (pos $startpos(i) $endpos(i)) i }
 | i = ID0 DCOL s = schema { annotate (pos $startpos(i) $endpos(i)) ~ty:(`Annot s) i }
 *)
-                  
-identifier:				
+
+identifier:
 | i = ID { annotate (pos $startpos(i) $endpos(i)) i }
 | LP i = ID DCOL s = schema RP
   {
@@ -301,4 +309,3 @@ const:
     Some (expr_list (pos $startpos(s) $endpos(s)) l)
   }
 | b = BOOL { Some (ann $startpos(b) $endpos(b) (Const (CBool b))) }
-

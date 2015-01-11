@@ -11,19 +11,12 @@ module Tag =
     let unfrozen = 4
   end
 
-(* TODO : check difference between jump and branch *)
 
-(* TODO : question : values are alway in the heap or can be on the stack (block of several words)
-                     this will determine if we can store a value in a register ... *)
+(* boolean false and empty list are integer 0 *)
 
-(* value are represented as in https://www.lri.fr/~filliatr/ens/compil/examen/janvier-12.pdf *)
-(* TODO : optim : store tags on only 1 byte *)
+(* s0 and s1 should always be restored
+  (they contains the current argument and closure respectively *)
 
-(* boolean false is 0 *)
-
-(* s0 and s1 should always be restored (they contains the current argument and closure respectively *)
-
-(* current environement is pointed by register ... *)
 
 let compile_label (L l) = ("L" ^ string_of_int l)
 
@@ -268,18 +261,9 @@ let compile_instr ir = match ir with
        match s with
        | `error -> error
        | `putChar -> putChar
-		      ++ compile_alloc AImm
-		      ++ compile_store_value (Imm 0)
+		     ++ compile_alloc AImm
+		     ++ compile_store_value (Imm 0)
      end
-  | ApplyCons ->
-     comment "Apply cons"
-     ++ pop t0
-     ++ move t1 v0
-     ++ allocate 12
-     ++ sw t0 areg (4, v0)
-     ++ sw t1 areg (8, v0)
-     ++ li t0 Tag.cons
-     ++ sw t0 areg (0, v0)
   | ApplyUncons ->
      comment "Apply uncons"
      ++ lw t0 areg (4, v0)

@@ -1,14 +1,14 @@
 (* Main Program *)
 open Typer
 open Mips
-       
+
 let usage = "usage: petitghc [options] file.hs"
 
 let parse_only = ref false
 let type_only = ref false
 let print_ast = ref false
 let print_type = ref false
-		    
+
 let spec =
   [
     "--parse-only", Arg.Set parse_only, "stop after parsing";
@@ -23,33 +23,45 @@ module CheckMain(Err:Errors.S) =
   struct
     let check defs defsType =
       try
-	let ({ Ast.annot = (Ast.Pos (spos, epos), _) ; _}, _) = List.find (fun (x,_) -> x.Ast.data = "main") defs in
+	let ({ Ast.annot = (pos, _) ; _}, _) =
+	  List.find (fun (x,_) -> x.Ast.data = "main") defs in
 	try
 	  let sch = List.assoc "main" defsType in
 	  let alpha = Var.fresh () in
-	  ignore (Unification.unify [(alpha, (Schema.BFlexible, sch))] (Ty.variable alpha) (Ty.constructor "IO" [Ty.constructor "()" []]))
+	  Unification.unify [(alpha, (Schema.BFlexible, sch))]
+			    (Ty.variable alpha)
+			    Definitions.(io !!"()")
+	  |> ignore
 	with Unification.Failure trace ->
-	  let msg = List.fold_left (fun s m -> s ^ "\n\t\t" ^ m) "type error : While typing main..." trace in
-	  Err.report msg spos epos ;
-      with Not_found -> Err.report "type error : main is not present" (Lexing.dummy_pos) (Lexing.dummy_pos)
+	  let msg =
+	    List.fold_left
+	      (fun s m -> s ^ "\n\t\t" ^ m)
+	      "type error : While typing main..." trace
+	  in
+	  Err.report msg pos ;
+      with Not_found ->
+	Err.report "type error : main is not present" Pos.dummy
   end
 
 module CheckPrimitiveName(Err:Errors.S) =
   struct
     let primitives = ["div"; "rem"; "putChar" ; "error"]
     let check defs =
-      List.iter (fun (d, _) ->
-		 if List.mem d.Ast.data primitives
-		 then begin
-		     let (Ast.Pos (spos, epos), _) = d.Ast.annot in
-		     Format.fprintf Format.str_formatter
-				    "type error : %s is a primitive name" d.Ast.data ;
-		     Err.report (Format.flush_str_formatter ()) spos epos
-		   end) defs
+      List.iter
+	(fun (d, _) ->
+	 if List.mem d.Ast.data primitives
+	 then
+	   begin
+	     let (pos, _) = d.Ast.annot in
+	     Format.fprintf
+	       Format.str_formatter
+	       "type error : %s is a primitive name" d.Ast.data ;
+	     Err.report (Format.flush_str_formatter ()) pos
+	   end) defs
   end
-			 
 
-    
+
+
 let file =
   let file = ref None in
   let set_file s =
@@ -74,7 +86,7 @@ let () =
   let defs = Par.main Lex.token lb in
 
   if SyntaxErr.has_error_occured ()
-  then 
+  then
     begin
       List.iter print_endline (SyntaxErr.get_all ()) ;
       exit 1 ;
@@ -82,15 +94,15 @@ let () =
 
   if !print_ast
   then Printer.print_def_list Format.std_formatter defs ;
-  
+
   if !parse_only
   then exit 0 ;
-  
+
   let module Inference = Inference.Make(TypeErr) in
   let module CheckMain = CheckMain(TypeErr) in
   let module CheckPrimitiveName = CheckPrimitiveName(TypeErr) in
-  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions [] env defs Lexing.dummy_pos Lexing.dummy_pos in
-  
+  let (_, defsType) = Inference.infer_potentially_mutually_recursive_definitions [] env defs Pos.dummy in
+
   CheckMain.check defs defsType ;
   CheckPrimitiveName.check defs ;
 
@@ -100,7 +112,7 @@ let () =
       List.iter print_endline (TypeErr.get_all ()) ;
       exit 1
     end  ;
-  
+
   if !print_type
   then
     begin
@@ -113,17 +125,17 @@ let () =
 
   if !type_only
   then exit 0 ;
-  
+
   let _ =
     List.fold_left
-      (fun globals ({ Ast.data = s ; _ }, _) -> Ast.VarSet.add s globals) 
+      (fun globals ({ Ast.data = s ; _ }, _) -> Ast.VarSet.add s globals)
       Ast.VarSet.empty defs
     |> Ast.VarSet.add "putChar"
     |> Ast.VarSet.add "error"
     |> Ast.VarSet.add "div"
     |> Ast.VarSet.add "rem"
   in
-  
+
   let ir =
     let ir =
       List.fold_left
@@ -141,7 +153,7 @@ let () =
     List.fold_left (fun code ({ Ast.data = s ; _}, _) -> code ++ label ("G" ^ s) ++ dword [0])
 		   nop defs
   in
-  let program = 
+  let program =
       {
 	text =
 	  label "main"

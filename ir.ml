@@ -1,9 +1,6 @@
 open Ast
 
 
-(* Warning : no more stack in he ir, was useless ! *)
-
-(* invariant : the value returned by an expression of mini-haskell will always be in v0 *)
 
 (* TODO : a nice interface, cf mips.ml *)
 
@@ -45,13 +42,13 @@ type ir =
   | ReturnCall
   | ReturnForce
   | Push (* push v0 *)
-  | Pop of int (* deallocate an given number of variables on the stack *)
-  (* is it really usefull ? there will always be a Return after that (?) *)
+  | Pop of int (* pop an given number of variables from the stack *)
   | Fetch of variable
-  | Store of variable (* change the content of a variable to the current value ; will be usefull for recursive definitions, cf let bindings *)
+  | Store of variable
+  (* change the content of a variable to the current value ;
+     will be usefull for recursive definitions, cf let bindings *)
   | UnPrim of unprim
   | BinPrim of binprim
-  | ApplyCons
   | ApplyUncons (* push hd ; push tl *)
 and unprim = [ `error | `putChar ]
 and binprim = [ `div | `rem | `add | `sub | `mul | `lt
@@ -73,7 +70,8 @@ let index l x =
   | h :: t -> if h = x then i else loop t (i + 1)
   in loop l 0
 
-let calc_free_vars_ast ast(*:typed_ast*) : free_vars_expr = (* TODO : the transformation from lists to set has become usefull ! *)
+let calc_free_vars_ast ast(*:typed_ast*) : free_vars_expr =
+  (* TODO : the transformation from lists to set has become usefull ! *)
   let f set _ = VarSet.fold (fun x res -> x :: res) set []
   in gen_traversal f (annot_free_vars ast)
 
@@ -200,44 +198,52 @@ and expr_to_ir (env : variable VarMap.t) locals (ast:free_vars_expr) = match ast
   | Let (binds, body) ->
      let n = List.length binds in
      let new_env =
-       List.fold_left (fun (map, i) ({data = v ; _}, _) -> (VarMap.add v (LocalVar i) map, succ i)) (env, locals) binds
+       List.fold_left
+	 (fun (map, i) ({data = v ; _}, _) ->
+	  (VarMap.add v (LocalVar i) map, succ i))
+	 (env, locals) binds
        |> fst
      in
      ( binds
-       |> List.map (fun (_, e) -> (alloc_frozen new_env e) @ [ Push ]) (* TODO : check the indices *)
+       |> List.map (fun (_, e) -> (alloc_frozen new_env e) @ [ Push ])
        |> List.flatten )
      @ ( binds
-	 |> List.mapi (fun i (_, e) -> [Fetch (LocalVar (locals + i))] @ (store_frozen new_env e))
+	 |> List.mapi (fun i (_, e) -> [Fetch (LocalVar (locals + i))]
+				       @ (store_frozen new_env e))
 	 |> List.flatten)
      @ (expr_to_ir new_env (locals + n) body)
      @ [ Pop n ]
-  | Spec s -> begin match s with
-                    | If (cond, ontrue, onfalse) ->
-                       let lfalse = next_label () in
-                       let lcont = next_label () in
-                       (expr_to_ir env locals cond)
-                       @ [ Force ; BranchFalse lfalse ]
-                       @ (expr_to_ir env locals ontrue)
-                       @ [ Branch lcont ; Label lfalse ]
-                       @ (expr_to_ir env locals onfalse)
-                       @ [ Label lcont ]
-                    | Case (l, bempty, hd, tl, bnempty) ->
-		       let lempty = next_label () in
-		       let lcont = next_label () in
-		       (expr_to_ir env locals l)
-		       @ [ Force ; BranchFalse lempty ] (* note: false and empty have the same representation *)
-		       @ [ ApplyUncons ]
-		       @ ( let env = env
-				     |> VarMap.add hd.data (LocalVar locals)
-				     |> VarMap.add tl.data (LocalVar (locals + 1))
-			   in expr_to_ir env (locals + 2) bnempty )
-		       @ [ Pop 2 ; Branch lcont ; Label lempty ]
-		       @ (expr_to_ir env locals bempty)
-		       @ [ Label lcont ]
-		    | Do l  ->
-		       List.fold_left (fun ir expr -> ir @ expr_to_ir env locals expr) [] l
-                    | Return -> [Alloc (AImm) ; Value (Imm 0)]
-              end
+  | Spec s ->
+     begin
+       match s with
+       | If (cond, ontrue, onfalse) ->
+          let lfalse = next_label () in
+          let lcont = next_label () in
+          (expr_to_ir env locals cond)
+          @ [ Force ; BranchFalse lfalse ]
+          @ (expr_to_ir env locals ontrue)
+          @ [ Branch lcont ; Label lfalse ]
+          @ (expr_to_ir env locals onfalse)
+          @ [ Label lcont ]
+       | Case (l, bempty, hd, tl, bnempty) ->
+	  let lempty = next_label () in
+	  let lcont = next_label () in
+	  (expr_to_ir env locals l)
+	  @ [ Force ; BranchFalse lempty ]
+	  (* note: false and empty have the same representation *)
+	  @ [ ApplyUncons ]
+	  @ ( let env =
+		env
+		|> VarMap.add hd.data (LocalVar locals)
+		|> VarMap.add tl.data (LocalVar (locals + 1))
+	      in expr_to_ir env (locals + 2) bnempty )
+	  @ [ Pop 2 ; Branch lcont ; Label lempty ]
+	  @ (expr_to_ir env locals bempty)
+	  @ [ Label lcont ]
+       | Do l  ->
+	  List.fold_left (fun ir expr -> ir @ expr_to_ir env locals expr) [] l
+       | Return -> [Alloc (AImm) ; Value (Imm 0)]
+     end
   | Binop (bop, e1, e2) ->
      binop_to_ir env locals (bop, e1, e2)
 
@@ -273,9 +279,11 @@ and store_frozen env e =
      let new_env = closure_env env free_vars in
      let lfroz = next_label () in
      let lcont = next_label () in
-     let froz_env = List.map (fun s -> VarMap.find s env) free_vars in (* get the indices of all free variables to build the env of the closure *)
+     let froz_env = List.map (fun s -> VarMap.find s env) free_vars in
+     (* get the indices of all free variables to build the env of the closure *)
      [ Branch lcont ; Label lfroz ; StartCall ]
-     @ (expr_to_ir new_env 0 e) (* no need of a "return" ?? to see with the force function *)
+     @ (expr_to_ir new_env 0 e)
+     (* no need of a "return" ?? to see with the force function *)
      @ [ ReturnCall ; Label lcont ; Value (Froz (lfroz, froz_env)) ]
 and froze env e =
   (alloc_frozen env e) @ (store_frozen env e)

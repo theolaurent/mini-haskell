@@ -51,15 +51,13 @@ and 'a spec =
   | Return
 and 'a gen_def = 'a annoted_var * 'a gen_expr
 
-type pos = Pos of Lexing.position * Lexing.position
-let pos s e = Pos (s, e)
 
 (* TODO : use this type everywhere we need a position e.g. the errors module *)
 
-type expr = (pos * [ `Unty | `Annot of Typer.Schema.schema ]) gen_expr
-type def = (pos * [ `Unty | `Annot of Typer.Schema.schema ]) gen_def
-type typed_expr = (pos * [ `Ty of unit ]) gen_expr
-type typed_def = (pos * [ `Ty of unit ]) gen_def
+type expr = (Pos.t * [ `Unty | `Annot of Typer.Schema.schema ]) gen_expr
+type def = (Pos.t * [ `Unty | `Annot of Typer.Schema.schema ]) gen_def
+type typed_expr = (Pos.t * [ `Ty of unit ]) gen_expr
+type typed_def = (Pos.t * [ `Ty of unit ]) gen_def
 
 let annotate pos ?ty expr =
   let t = match ty with
@@ -103,18 +101,29 @@ let annot_free_vars expr =
     | Abstr ({ data = v ; _ }, body) -> VarSet.remove v body.annot
     | App (f, e) -> VarSet.union f.annot e.annot
     | Let (binds, body) -> (* Definitions are recursive by default *)
-       let allfvars = List.fold_left (fun res (_, e) -> VarSet.union res e.annot) body.annot binds in
-       let boundvars = List.fold_left (fun res (v, _) -> VarSet.union res (VarSet.singleton v.data)) VarSet.empty binds in
+       let allfvars =
+	 List.fold_left
+	   (fun res (_, e) -> VarSet.union res e.annot)
+	   body.annot binds
+       in
+       let boundvars =
+	 List.fold_left
+	   (fun res (v, _) -> VarSet.union res (VarSet.singleton v.data))
+	   VarSet.empty binds
+       in
        VarSet.diff allfvars boundvars
-    | Spec s -> begin match s with
-                      | If (e1, e2, e3) -> VarSet.union (VarSet.union e1.annot e2.annot) e3.annot
-                      | Case (e, nilcase, vh, vt, conscase) ->
-                         VarSet.union (VarSet.union e.annot nilcase.annot)
-                                      (VarSet.remove vh.data (VarSet.remove vt.data conscase.annot))
-                      | Do le -> List.fold_left (fun res e -> VarSet.union res e.annot) VarSet.empty le
-                      | Return -> VarSet.empty
-
-                end
+    | Spec s ->
+       begin
+	 match s with
+         | If (e1, e2, e3) -> VarSet.union (VarSet.union e1.annot e2.annot) e3.annot
+         | Case (e, nilcase, vh, vt, conscase) ->
+            VarSet.union
+	      (VarSet.union e.annot nilcase.annot)
+              (VarSet.remove vh.data (VarSet.remove vt.data conscase.annot))
+         | Do le ->
+	    List.fold_left (fun res e -> VarSet.union res e.annot) VarSet.empty le
+         | Return -> VarSet.empty
+       end
     | Binop (_, x, y) -> VarSet.union x.annot y.annot
   in gen_traversal f expr
 
