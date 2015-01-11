@@ -31,6 +31,10 @@ L'arbre syntaxique produit est un type riche : on distingue notamment les opéra
 Pour le typage, un système de type "à la MLF" a été implémenté (cf. section "Extension : MLF").
 
 \subsection{Génération de code}
+Pour la génération du code le compilateur passe par une représentation intermédiaire (IR). \\
+Cette représentation est une suite d'instruction linéaire. Le résultat de chaque instruction de l'IR est supposé être passé implicitement à l'instruction suivante. \\
+Elle peut accéder à la pile via les instructions \texttt{Push} et \texttt{Pop} ets certaines instructions modifient implicitement l'état de la pile (\texttt{ApplyUncons} ajoute deux élément à la pile ; \texttt{ApplyUnnop}, \texttt{ApplyBinop} et \texttt{CallFun} enlèvent des élements de la pile (leur argument) ; \texttt{StartFun} et \texttt{Return} initialise et restaure le tableau d'activation lors d'un appel). \\
+Lors de la transformation de l'ast vers cette IR, les glaçons et les fermetures sont explicités et les noms de variables sont remplaçés par leur emplacement (locale, argument, da,s l'environement la fermeture, globale).
 
 
 \section{Difficultés rencontrées}
