@@ -5,6 +5,7 @@
 \usepackage[french]{babel}
 \usepackage{listings}
 \usepackage{examplep}
+\usepackage{nameref}
 
 \title{TODO}
 
@@ -47,7 +48,7 @@ L'arbre syntaxique produit est un type riche : on distingue notamment les opéra
 
 \subsection{Typage}
 Pour le typage, un système de type \og à la \mlf \fg ~a été implémenté
-(cf. section "Extension : \mlf"). % TODO : utiliser les references Latex
+(cf. section \nameref{mlf}). % TODO : utiliser les references Latex
 
 \subsection{Génération de code}
 Pour la génération du code le compilateur passe par une représentation intermédiaire (IR). \\
@@ -101,7 +102,10 @@ nécéssaire d'allouer l'espace nécessaire pour chacune des valeurs
 emplacements dans le tas et pouvoir les ajouter à leurs environements
 mutuels.
 
-\section{Extension : \mlf}
+\section{Extension : \mlf}\label{mlf}
+
+\subsection{Un système de type intéressant}
+
 Nous avons implémenté le système de type décrit dans la thése de
 Didier le Botlan \textit{TODO : référence + bibliographie}. Il s'agit
 d'un algorithme d'inférence de type \og à la ML \fg~pour le système F.
@@ -112,5 +116,13 @@ toujours implicite). La puissance du système \mlf réside dans le fait
 que tout les programme (non annotés) typables dans ML sont typables
 dans \mlf \emph{sans annotations}.
 
+\subsection{Exemples d'utilisations}
+
+\subsubsection{Typage du traditionnel}
+
+\subsubsection{Les paires du lambda calcul}
+TODO : cf these didier le botlan
+
+\subsubsection{Types existentiels}
 
 \end{document}
