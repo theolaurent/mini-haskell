@@ -23,6 +23,12 @@
 
 \section{Interface du compilateur}
 
+\subsection{Compilation}
+\PVerb{petitghc} est écrit en OCaml $4.02$. Il dépend de la bibliothèqe ocamlgraph.
+
+La commande \PVerb{make} compile \PVerb{petitghc}.
+La commande \PVerb{make clean} supprime tous les fichiers générés lors de la compilation.
+
 \subsection{Arguments}
 En plus des options \PVerb{--parse-only} et \PVerb{--type-only}, les options suivantes sont disponibles :
 \begin{itemize}
@@ -30,10 +36,8 @@ En plus des options \PVerb{--parse-only} et \PVerb{--type-only}, les options sui
 \item[\PVerb{--print-type}] Affiche le type de chacune des variables globales.
 \end{itemize}
 
-\subsection{Report d'erreur}
+\subsection{Report d'erreurs}
 Lors de chaque phase de la compilation (en l'occurence l'analyse syntaxique et le typage), le compilateur tente de trouver le plus d'erreurs possibles. Si à la fin d'une phase des erreurs ont été trouvées, elles sont affichées (dans l'ordre d'occurence) et la compilation s'arrête avec le code d'erreur $1$.
-
-\subsection{Erreur de typage}
 Lorsqu'une unification échoue, le terme de l'ast en cours d'inférence puis la trace des unifications successives sont affichées.
 
 \section{Choix techniques}
