@@ -78,9 +78,20 @@ Celà a grandement complexifié le code de l'algorithme d'inférence de type.
 
 \subsection{Calcul des variables libres lors du typage}
 
-Lors du typage,
+Lors du typage, le calcul des variables (de type) libres était
+extrèmement lent (plusieurs heures sur certains des exemples fournis).
+Nous avons donc choisis de stocker les variables libres contenues dans
+un schéma on un type et de seulement les mettre à jour à la volée.
+
 
 \subsection{Définitions mutuelement récursives}
+
+La compilation des valeurs mutuellement récursives a posé quelques
+petites difficutlés, nous nous sommes rendu compte qu'il était
+nécéssaire d'allouer l'espace nécessaire pour chacune des valeurs
+\emph{avant} la compilation de celles-ci, pour connaitre leurs
+emplacements dans le tas et pouvoir les ajouter à leurs environements
+mutuels.
 
 \section{Extension : MLF}
 
